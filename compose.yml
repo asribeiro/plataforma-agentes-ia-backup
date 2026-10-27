@@ -1,0 +1,84 @@
+# Stack isolada da plataforma. Uso:
+#   docker compose --env-file .env.docker up -d --build
+name: plataforma-agentes
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: Dockerfile.backend
+  env_file: [.env.backend]
+  restart: unless-stopped
+  networks: [internal]
+  volumes:
+    - app_data:/data
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: plataforma-agentes-web
+    restart: unless-stopped
+    networks: [internal]
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8082}:80"
+    depends_on: [api]
+
+  api:
+    <<: *backend
+    container_name: plataforma-agentes-api
+
+  worker:
+    <<: *backend
+    container_name: plataforma-agentes-worker
+    command: >
+      celery -A backend.worker.celery_app:app worker --loglevel=INFO --concurrency=2
+      -Q messages_queue,waha_messages_queue,confirmation_queue,scheduling_queue,followup_queue,noshow_queue,pos_consulta_queue,pos_venda_queue,reminders_queue,scheduled_messages_queue,nutrition_campaign_queue,agents_sdk_queue,flow_execution_queue,whatsapp_campaign_queue
+
+  beat:
+    <<: *backend
+    container_name: plataforma-agentes-beat
+    command: celery -A backend.worker.celery_app:app beat --loglevel=INFO --schedule /data/celerybeat-schedule
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: plataforma-agentes-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: plataforma_agentes
+      POSTGRES_USER: plataforma_agentes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD em .env.docker}
+    networks: [internal]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U plataforma_agentes -d plataforma_agentes"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: plataforma-agentes-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    networks: [internal]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  internal:
+    name: plataforma-agentes-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_data:
