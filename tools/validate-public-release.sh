@@ -67,10 +67,12 @@ done
 git grep -q 'SUA_EMPRESA' -- frontend/src/config/branding.ts docs/public/05-personalizacao.md \
   || fail 'placeholder e instruções de branding ausentes'
 
-mapfile -t migrations < <(find backend/alembic/versions -maxdepth 1 -type f -name '*.py' -print)
-if [[ "${#migrations[@]}" -ne 1 ]]; then
-  fail "esperada exatamente uma migração inicial; encontradas ${#migrations[@]}"
-fi
+# Histórico de migrations: importa a cadeia ser linear, completa e com uma única
+# raiz — não a quantidade de arquivos. O head único é verificado logo abaixo.
+# A regra anterior exigia um arquivo só, o que valia quando este repositório era
+# um template de baseline única; o projeto cresceu e reescrever o passado
+# quebraria o banco de produção já estampado na última revisão.
+"$PYTHON_BIN" tools/check_migration_chain.py || fail 'cadeia de migrations inconsistente'
 
 "$PYTHON_BIN" tools/security_check.py
 "$PYTHON_BIN" -m compileall -q backend
