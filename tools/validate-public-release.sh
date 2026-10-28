@@ -72,7 +72,7 @@ git grep -q 'SUA_EMPRESA' -- frontend/src/config/branding.ts docs/public/05-pers
 # A regra anterior exigia um arquivo só, o que valia quando este repositório era
 # um template de baseline única; o projeto cresceu e reescrever o passado
 # quebraria o banco de produção já estampado na última revisão.
-"$PYTHON_BIN" tools/check_migration_chain.py || fail 'cadeia de migrations inconsistente'
+"$PYTHON_BIN" tools/migration_chain_gate.py || fail 'cadeia de migrations inconsistente'
 
 "$PYTHON_BIN" tools/security_check.py
 "$PYTHON_BIN" -m compileall -q backend
