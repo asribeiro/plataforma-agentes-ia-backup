@@ -119,3 +119,5 @@ personal-os/
 *.py.bak-*
 *.bak-audio-*
 tmp-share/
+.env.backend
+.env.docker
