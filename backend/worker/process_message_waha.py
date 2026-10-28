@@ -230,6 +230,24 @@ def tipo_tem_resposta_automatica(msg_type: str) -> bool:
     """True quando o tipo entra no fluxo normal de conversa do agente."""
     return msg_type in TIPOS_COM_RESPOSTA
 
+def resolver_tipo_waha(payload: Dict[str, Any], media_type: str = "") -> str:
+    """Descobre o tipo da mensagem WAHA, tolerando campos vazios.
+
+    Ordem de confianca: `type` da raiz, `_data.type` (onde o WAHA realmente
+    coloca o tipo, ex.: "ptt" para nota de voz) e, por fim, o tipo inferido do
+    protobuf (`media_type`). Strings vazias sao ignoradas em todas as camadas:
+    era exatamente isso que fazia nota de voz virar "chat".
+    """
+    candidatos = (
+        payload.get("type"),
+        (payload.get("_data") or {}).get("type") if isinstance(payload.get("_data"), dict) else None,
+        media_type,
+    )
+    for candidato in candidatos:
+        if isinstance(candidato, str) and candidato.strip():
+            return candidato.strip().lower()
+    return ""
+
 def _waha_payload_summary(waha_payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = waha_payload.get("payload", {}) if isinstance(waha_payload, dict) else {}
     _data = payload.get("_data", {}) if isinstance(payload, dict) else {}
@@ -741,10 +759,14 @@ def normalize_waha_payload(waha_data: Dict[str, Any]) -> Dict[str, Any]:
         elif "locationMessage" in message_data:
              media_type = "location"
 
-    # Fallback para type normal caso MediaType não exista
-    msg_type = payload.get("type", media_type)
+    # Fallback para type normal caso MediaType não exista.
+    # ATENCAO: `payload.get("type", media_type)` NAO serve aqui. Se a chave
+    # "type" existe vazia (acontece em nota de voz do WAHA), o default e ignorado
+    # e o tipo vira "", forcando "chat" e perdendo o audio. _data.type e a fonte
+    # confiavel: ptt, image, video, document...
+    msg_type = resolver_tipo_waha(payload, media_type)
 
-    # 🔥 CORREÇÃO: Se msg_type ainda for vazio, forçar "chat"
+    # Se nada foi encontrado em nenhuma camada, assume conversa de texto
     if not msg_type:
         msg_type = "chat"
     from_me = payload.get("fromMe", False)
