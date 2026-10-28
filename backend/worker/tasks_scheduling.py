@@ -9,7 +9,6 @@ from backend.db import SessionLocal
 from backend.worker.celery_app import app
 from backend.prompt.scheduling.scheduling_service import SchedulingService
 from sqlalchemy.sql import text
-from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 

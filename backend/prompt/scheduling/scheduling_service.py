@@ -15,7 +15,6 @@ from ..db_integration.agent_config import get_agent_config_dict
 from .google_calendar_integration import obter_eventos_calendario
 from .clinicorp_integration import ClinicorpIntegration
 from .slots_monitor import slots_monitor
-from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 SP_TZ = ZoneInfo("America/Sao_Paulo")

@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from backend.redis_client import get_redis_client
 
 # Carregar arquivo .env baseado na variável de ambiente
 ENV_FILE = os.getenv('ENV_FILE', '.env')

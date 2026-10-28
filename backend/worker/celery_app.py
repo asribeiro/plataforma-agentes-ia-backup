@@ -6,7 +6,6 @@ from celery.schedules import crontab
 from celery.signals import worker_process_init
 
 from backend.worker.db_pool_lifecycle import dispose_inherited_sqlalchemy_pool
-from backend.redis_client import get_redis_client
 
 # Carrega variáveis de ambiente do .env (se existir)
 load_dotenv()
