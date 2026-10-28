@@ -45,6 +45,52 @@ def get_url():
     return DATABASE_URL or config.get_main_option("sqlalchemy.url")
 
 
+# ---------------------------------------------------------------------------
+# P2-09: guarda contra autogenerate destrutivo
+#
+# O ORM nao cobre todas as tabelas e colunas que existem no banco (webhook_audit,
+# follow_up_executions, confirmation_executions, pos_venda_*, contacts.archived,
+# entre outras). Sem esta trava, `alembic revision --autogenerate` produz um
+# rascunho com dezenas de drop_* que apagaria dados em uso se aplicado.
+#
+# Com a trava, o autogenerate falha e o humano decide: ou escreve a migration a
+# mao, ou primeiro alinha o ORM com o banco.
+# ---------------------------------------------------------------------------
+_OPERACOES_DESTRUTIVAS = {
+    "DropTableOp": "apagar tabela",
+    "DropColumnOp": "apagar coluna",
+    "DropConstraintOp": "apagar constraint",
+    "DropIndexOp": "apagar indice",
+}
+
+
+def recusar_autogenerate_destrutivo(context, revision, directives):
+    """Bloqueia o rascunho se ele propuser apagar qualquer coisa."""
+    if not directives:
+        return
+    upgrade = getattr(directives[0], "upgrade_ops", None)
+    if upgrade is None:
+        return
+
+    encontradas = []
+    for op in getattr(upgrade, "ops", []):
+        nome = type(op).__name__
+        if nome in _OPERACOES_DESTRUTIVAS:
+            alvo = getattr(op, "table_name", None) or getattr(op, "index_name", None) or "?"
+            encontradas.append(f"  - {_OPERACOES_DESTRUTIVAS[nome]}: {alvo}")
+
+    if encontradas:
+        directives[:] = []
+        raise RuntimeError(
+            "Autogenerate cancelado: o rascunho apagaria objetos que existem no banco.\n"
+            + "\n".join(encontradas)
+            + "\n\nO ORM esta incompleto em relacao ao banco. Opcoes:\n"
+            "  1. Escrever a migration a mao (op.drop_* explicito continua permitido).\n"
+            "  2. Alinhar o ORM com o banco antes de gerar a migration.\n"
+            "Nenhum arquivo foi criado."
+        )
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -59,6 +105,7 @@ def run_migrations_offline() -> None:
     """
     url = get_url()
     context.configure(
+        process_revision_directives=recusar_autogenerate_destrutivo,
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
@@ -95,6 +142,7 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
+        process_revision_directives=recusar_autogenerate_destrutivo,
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
