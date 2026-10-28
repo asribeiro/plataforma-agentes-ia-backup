@@ -22,6 +22,7 @@ from backend.services.ai_provider_service import (
     safe_ai_provider_runtime_error,
 )
 from backend.services.ai_usage_service import safe_record_tts_usage
+from backend.runtime_settings import CONVERSATIONS_DB_PATH
 
 from .agents.coordinator_agent import coordinator_agent
 from .agents.contact_identification_agent import contact_identification_agent
@@ -160,7 +161,10 @@ class AgentExecutionManager:
         """Get or create SQLiteSession following OpenAI documentation"""
         session_id = self._get_session_id(phone)
         # Use file-based SQLiteSession as shown in documentation (line 134)
-        session = SQLiteSession(session_id, "conversations.db")
+        # P2-08: caminho absoluto e persistido. O literal "conversations.db"
+        # resolvia para o CWD do container (/app), fora do volume nomeado, e a
+        # memoria de conversa sumia a cada recreate do container.
+        session = SQLiteSession(session_id, str(CONVERSATIONS_DB_PATH))
         return session
 
     async def _safe_import_history(self, phone: str, session: SQLiteSession):
