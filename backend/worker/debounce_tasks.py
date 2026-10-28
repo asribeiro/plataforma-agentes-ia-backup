@@ -4,11 +4,12 @@ from datetime import datetime, timedelta
 from typing import List, Callable, Optional
 from celery import current_app
 from backend.worker.celery_app import app
+from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
 # Redis connection for debounce buffers
-redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+redis_client = get_redis_client(decode_responses=True)
 
 # Debounce interval in seconds
 DEBOUNCE_INTERVAL = 20

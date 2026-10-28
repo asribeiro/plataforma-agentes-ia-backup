@@ -36,6 +36,7 @@ from .database import AgentExecution
 from .prompts import CompanyContext
 from .config.model_config import get_model_config
 from .voice import AudioService, AudioRequest, AudioResponse
+from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -1045,7 +1046,7 @@ class AgentExecutionManager:
         """Check if we're in referral collection mode for this phone"""
         try:
             import redis
-            r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+            r = get_redis_client(decode_responses=True)
             key = f"referral_collection:{self.company_id}:{phone}"
             value = r.get(key)
             return value == "active"

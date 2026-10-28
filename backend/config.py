@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from backend.redis_client import get_redis_client
 
 # Carregar arquivo .env baseado na variável de ambiente
 ENV_FILE = os.getenv('ENV_FILE', '.env')
@@ -17,7 +18,7 @@ CHAT_MEMORY_DIR = os.getenv("CHAT_MEMORY_DIR", "")
 # Novas configurações para ambientes
 ENVIRONMENT = os.getenv('ENVIRONMENT', 'production')
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
-REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
+REDIS_URL = (os.getenv("REDIS_URL") or "redis://redis:6379/0")
 
 
 def _required_env(name: str, default_dev: str = "") -> str:

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from .models import AppointmentState, TransitionContext, TransitionDecision
 from .state_manager import LangChainStateManager
 from .transition_chain import create_transition_chain, prepare_transition_context
+from backend.redis_client import get_redis_client
 
 # Importar validadores avançados
 try:
@@ -30,7 +31,7 @@ def get_redis_client() -> redis.Redis:
     """Get Redis client instance"""
     # Try to get from environment or use default
     import os
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    redis_url = (os.getenv("REDIS_URL") or "redis://redis:6379/0")
     return redis.from_url(redis_url)
 
 

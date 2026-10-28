@@ -12,6 +12,7 @@ from backend.db import SessionLocal
 from backend.models import Message, ContactTask, ScheduledMessageExecution
 from backend.runtime_settings import LOG_DIR as RUNTIME_LOG_DIR
 from .flow_control import check_flow_control
+from backend.redis_client import get_redis_client
 
 # Configuração de logs
 LOG_DIR = str(RUNTIME_LOG_DIR)
@@ -26,7 +27,7 @@ logger.addHandler(file_handler)
 logger.setLevel(logging.INFO)
 
 # Conexão Redis
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+redis_client = get_redis_client()
 
 def publish_message_to_redis(msg_type: str, content: str, phone: str, from_me: bool = True):
     """Publica mensagem no Redis para broadcast via WebSocket."""

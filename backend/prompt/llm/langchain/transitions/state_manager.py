@@ -26,7 +26,7 @@ class LangChainStateManager:
     def __init__(
         self,
         redis_client: Optional[redis.Redis] = None,
-        redis_url: str = "redis://localhost:6379",
+        redis_url: str = "redis://redis:6379/0",
         ttl: int = 86400,  # 24 hours default
         key_prefix: str = "langchain_state"
     ):

@@ -15,6 +15,7 @@ from ..db_integration.agent_config import get_agent_config_dict
 from .google_calendar_integration import obter_eventos_calendario
 from .clinicorp_integration import ClinicorpIntegration
 from .slots_monitor import slots_monitor
+from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 SP_TZ = ZoneInfo("America/Sao_Paulo")
@@ -46,7 +47,7 @@ class SchedulingService:
         logger.info(f"[SchedulingService] Integrações de calendário encontradas: {self.integrations}")
 
         # Configuração do Redis
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_url = (os.getenv("REDIS_URL") or "redis://redis:6379/0")
         self.redis_client = redis.from_url(redis_url)
 
     def _get_company_timezone(self) -> ZoneInfo:

@@ -5,9 +5,10 @@ import redis
 import logging
 import json
 from typing import Optional
+from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
-redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+redis_client = get_redis_client(decode_responses=True)
 
 # Intervalo de debounce compartilhado por todas as empresas (em segundos).
 DEFAULT_DEBOUNCE_INTERVAL_SECONDS = 15

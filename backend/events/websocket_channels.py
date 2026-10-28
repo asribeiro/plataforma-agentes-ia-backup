@@ -11,7 +11,7 @@ import re
 from typing import Optional
 
 
-DEFAULT_WEBSOCKET_REDIS_URL = "redis://localhost:6379/0"
+DEFAULT_WEBSOCKET_REDIS_URL = "redis://redis:6379/0"
 DEFAULT_WEBSOCKET_APPLICATION_NAMESPACE = "agentive"
 _NAMESPACE_PART_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
 

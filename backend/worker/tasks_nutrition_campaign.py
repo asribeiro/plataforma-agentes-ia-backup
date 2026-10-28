@@ -19,6 +19,7 @@ from backend.models import Message
 from backend.prompt.memory import memory_manager
 from backend.runtime_settings import LOG_DIR as RUNTIME_LOG_DIR, MEDIA_BASE_PATH as RUNTIME_MEDIA_BASE_PATH
 from .flow_control import check_flow_control
+from backend.redis_client import get_redis_client
 
 # Configuração de logs
 LOG_DIR = str(RUNTIME_LOG_DIR)
@@ -35,7 +36,7 @@ logger.addHandler(file_handler)
 logger.setLevel(logging.INFO)
 
 # Conexão Redis
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+redis_client = get_redis_client()
 
 # Base path para arquivos de mídia
 MEDIA_BASE_PATH = str(RUNTIME_MEDIA_BASE_PATH)

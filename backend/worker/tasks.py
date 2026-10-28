@@ -47,7 +47,7 @@ logger.addHandler(file_handler)
 logger.setLevel(logging.INFO)
 # >>> FIM NOVO <<<
 
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+redis_client = get_redis_client()
 
 # >>> NOVAS FUNÇÕES (Apenas para lidar com arquivos locais) <<<
 # Como "audio_processing.py" e "image_analysis.py" esperam URL, criamos
@@ -55,6 +55,7 @@ redis_client = redis.Redis(host='localhost', port=6379, db=0)
 # Mantém-se a lógica sem mudar código não solicitado.
 
 import requests
+from backend.redis_client import get_redis_client
 # Imports heavy libs moved to inside functions
 
 def transcribe_audio_local(file_path: str) -> str:
@@ -355,7 +356,7 @@ def enviar_passo_followup(
 
     # >>> Config de logs e Redis <<<
     logger = logging.getLogger(__name__)
-    redis_client = redis.Redis(host='localhost', port=6379, db=0)
+    redis_client = get_redis_client()
 
     # Criar diretório para logs detalhados de vídeo se não existir
     VIDEO_LOG_DIR = str(RUNTIME_LOG_DIR / "video-logs")

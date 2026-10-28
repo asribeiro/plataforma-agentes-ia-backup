@@ -18,6 +18,7 @@ from backend.models import User
 from backend.auth import get_current_user
 from backend.services.company_access_control import get_company_operational_epoch
 from starlette.concurrency import run_in_threadpool
+from backend.redis_client import get_redis_client
 import redis
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ logger.setLevel(logging.INFO)
 router = APIRouter()
 
 # Redis para enfileirar mensagens
-redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=False)
+redis_client = get_redis_client(decode_responses=False)
 
 
 def _resolve_waha_company_id(db: Session, session_name: str) -> int:

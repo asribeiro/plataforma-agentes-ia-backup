@@ -9,6 +9,7 @@ from backend.db import SessionLocal
 from backend.worker.celery_app import app
 from backend.prompt.scheduling.scheduling_service import SchedulingService
 from sqlalchemy.sql import text
+from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def update_one_company_availabilities(company_id: int):
         logger.info(f"[update_one_company_availabilities] Iniciando atualização para company_id={company_id}")
 
         # Configuração do Redis
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        redis_url = (os.getenv("REDIS_URL") or "redis://redis:6379/0")
         redis_client = redis.from_url(redis_url)
         key_name = f"availability:{company_id}"
         temp_key_name = f"availability_temp:{company_id}"

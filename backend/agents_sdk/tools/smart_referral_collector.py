@@ -17,6 +17,7 @@ from agents import RunContextWrapper, function_tool, trace
 # Import rota interna para criar leads
 from backend.models import Lead, Contact, Client
 from backend.services.ai_provider_service import get_company_openai_api_key
+from backend.redis_client import get_redis_client
 
 logger = logging.getLogger(__name__)
 
@@ -522,7 +523,7 @@ def _set_referral_collection_mode(db: Session, company_id: int, phone: str, acti
     try:
         # Armazenar estado em cache/session temporariamente
         import redis
-        r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        r = get_redis_client(decode_responses=True)
 
         key = f"referral_collection:{company_id}:{phone}"
         if active:

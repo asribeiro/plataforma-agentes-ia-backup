@@ -1,8 +1,9 @@
 import json
 import redis
 from typing import Dict, Any
+from backend.redis_client import get_redis_client
 
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+redis_client = get_redis_client()
 
 def publish_message_event(message_data: Dict[str, Any]):
     """Publica um evento de mensagem no Redis"""

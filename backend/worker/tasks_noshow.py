@@ -55,7 +55,7 @@ logger.setLevel(logging.INFO)
 # ----------------------------------------------------------------------------
 
 # Conexão Redis
-redis_client = redis.Redis(host='localhost', port=6379, db=0)
+redis_client = get_redis_client()
 
 # >>> NOVOS IMPORTS (apenas o necessário para transcrição/análise e gravação no .txt)
 import speech_recognition as sr
@@ -63,6 +63,7 @@ from pydub import AudioSegment
 from google.cloud import vision
 from google.oauth2 import service_account
 from backend.prompt.memory import memory_manager
+from backend.redis_client import get_redis_client
 
 # ------------------------------------------------
 #  >>> NOVAS FUNÇÕES (somente o necessário) <<<
