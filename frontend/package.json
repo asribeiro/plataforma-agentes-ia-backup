@@ -61,7 +61,6 @@
   },
   "devDependencies": {
     "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
-    "@shadcn/ui": "^0.0.4",
     "@tailwindcss/vite": "^4.3.2",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
@@ -69,13 +68,13 @@
     "@types/react-router-dom": "^5.3.3",
     "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^5.1.2",
-    "shadcn-ui": "^0.9.4",
     "tailwindcss": "^4.3.2",
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
     "vite-tsconfig-paths": "^6.0.3"
   },
   "overrides": {
-    "postcss": "^8.5.25"
+    "postcss": "^8.5.25",
+    "deepmerge-ts": "^8.0.0"
   }
 }
