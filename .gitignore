@@ -118,3 +118,4 @@ personal-os/
 .codex-keys/
 *.py.bak-*
 *.bak-audio-*
+tmp-share/
