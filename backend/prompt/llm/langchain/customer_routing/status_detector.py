@@ -9,6 +9,7 @@ High-performance customer status detection with:
 4. Comprehensive error handling and monitoring
 """
 
+from backend.redis_client import get_redis_client
 import logging
 import json
 from typing import Optional
