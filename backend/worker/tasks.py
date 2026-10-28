@@ -1,3 +1,4 @@
+from backend.redis_client import get_redis_client
 from datetime import datetime, timedelta
 import time
 import logging
@@ -55,7 +56,6 @@ redis_client = get_redis_client()
 # Mantém-se a lógica sem mudar código não solicitado.
 
 import requests
-from backend.redis_client import get_redis_client
 # Imports heavy libs moved to inside functions
 
 def transcribe_audio_local(file_path: str) -> str:

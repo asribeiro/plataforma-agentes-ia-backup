@@ -1,3 +1,4 @@
+from backend.redis_client import get_redis_client
 import logging
 import time as pytime
 import os
@@ -63,7 +64,6 @@ from pydub import AudioSegment
 from google.cloud import vision
 from google.oauth2 import service_account
 from backend.prompt.memory import memory_manager
-from backend.redis_client import get_redis_client
 
 # ------------------------------------------------
 #  >>> NOVAS FUNÇÕES (somente o necessário) <<<

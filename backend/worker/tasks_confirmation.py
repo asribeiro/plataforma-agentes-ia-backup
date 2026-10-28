@@ -1,3 +1,4 @@
+from backend.redis_client import get_redis_client
 # backend/worker/tasks_confirmation.py
 
 import logging
@@ -49,7 +50,6 @@ from pydub import AudioSegment
 from google.cloud import vision
 from google.oauth2 import service_account
 from backend.prompt.memory import memory_manager
-from backend.redis_client import get_redis_client
 
 # ----------------------------------------------------------------------------
 # >>> NOVAS FUNÇÕES para processar arquivos locais (áudio, vídeo, imagem) <<<
