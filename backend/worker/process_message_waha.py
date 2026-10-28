@@ -216,6 +216,20 @@ TIPOS_COM_CONTEUDO_OPCIONAL = (
     "location",  # lat/long vem em campo proprio
 )
 
+# Regra do produto: o agente conversa por texto e por audio (transcrito).
+# Qualquer outro tipo de mensagem recebe um aviso, nunca silencio.
+TIPOS_COM_RESPOSTA = ("text", "audio")
+
+MSG_TIPO_NAO_SUPORTADO = (
+    "Ola! Por aqui eu consigo ler mensagens de texto e ouvir audios. "
+    "Pode me escrever ou mandar um audio? Assim eu te ajudo agora mesmo."
+)
+
+
+def tipo_tem_resposta_automatica(msg_type: str) -> bool:
+    """True quando o tipo entra no fluxo normal de conversa do agente."""
+    return msg_type in TIPOS_COM_RESPOSTA
+
 def _waha_payload_summary(waha_payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = waha_payload.get("payload", {}) if isinstance(waha_payload, dict) else {}
     _data = payload.get("_data", {}) if isinstance(payload, dict) else {}
@@ -2694,6 +2708,43 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
                 logger.info(f"[WAHA Task] 🔇 Publicação no Redis SILENCIADA (Mensagem já existia e não houve atualização)")
 
         logger.info("[WAHA Task] ✅ Etapa de publicação no WebSocket concluída")
+
+        # Regra do produto: o agente responde apenas texto e audio (transcrito).
+        # Para os demais tipos, avisa o cliente em vez de deixar no silencio.
+        if not from_me and not tipo_tem_resposta_automatica(msg_type):
+            logger.info(
+                "[WAHA Task] Tipo sem resposta automatica: msg_type=%s company_id=%s",
+                msg_type,
+                company_id,
+            )
+            aviso_enviado = False
+            if session_name:
+                try:
+                    from backend.integrations.waha_utils import send_text_to_waha
+
+                    send_text_to_waha(
+                        waha_session_name=session_name,
+                        phone=phone,
+                        message=MSG_TIPO_NAO_SUPORTADO,
+                        company_id=company_id,
+                    )
+                    aviso_enviado = True
+                    logger.info("[WAHA Task] Aviso de tipo nao suportado enviado")
+                except Exception as exc:  # noqa: BLE001 - nunca derrubar a task por isso
+                    logger.warning(
+                        "[WAHA Task] Falha ao avisar tipo nao suportado: %s", exc
+                    )
+            if audit_id:
+                update_audit_status(
+                    db,
+                    audit_id,
+                    "ignored",
+                    error=(
+                        "Tipo sem resposta automatica: %s (aviso_enviado=%s)"
+                        % (msg_type, aviso_enviado)
+                    ),
+                )
+            return
 
         # Processar mídia (transcrição de áudio/vídeo, análise de imagem)
         user_text = ""
