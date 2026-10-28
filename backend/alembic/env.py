@@ -106,6 +106,7 @@ def recusar_autogenerate_destrutivo(context, revision, directives):
 # `alembic check` para confirmar, e entao remover o nome desta lista.
 # ---------------------------------------------------------------------------
 TABELAS_FORA_DO_AUTOGENERATE = {
+    "company_slots",  # tabela de SQL cru, sem model ORM
     "webhook_audit",
     "confirmation_executions",
     "follow_up_executions",

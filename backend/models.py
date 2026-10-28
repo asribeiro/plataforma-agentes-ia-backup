@@ -594,10 +594,25 @@ class Agenda(Base):
     google_calendar_id = Column(String(255), nullable=True)
     google_calendar_summary = Column(String(255), nullable=True)
     google_calendar_time_zone = Column(String(80), nullable=True)
+    # Agenda pertence a um profissional (1:1 quando ativo). Decisao de 28/10.
+    # NULLABLE: o CRUD de agenda ainda cria sem profissional (ver 0009).
+    professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="RESTRICT"), nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     company = relationship("Company", backref=backref("agendas", cascade="all, delete-orphan"))
     schedules = relationship("AgendaSchedule", back_populates="agenda", cascade="all, delete-orphan")
+    professional = relationship("Professional", foreign_keys=[professional_id])
+
+    __table_args__ = (
+        # 1:1 profissional<->agenda: aceita varios NULL, impede dois ATIVOS
+        # para o mesmo profissional. Espelha o indice da migration 0009.
+        Index(
+            "uq_agendas_professional_active",
+            "professional_id",
+            unique=True,
+            postgresql_where=text("active IS TRUE AND professional_id IS NOT NULL"),
+        ),
+    )
 
 class AgendaSchedule(Base):
     __tablename__ = "agenda_schedules"
@@ -651,6 +666,10 @@ class Agendamento(Base):
     id_agendamento = Column(String(255), nullable=True)
     event_id = Column(String(255), nullable=True)
     google_calendar_id = Column(String(255), nullable=True)
+    # Procedimento e prova do convite (migration 0009).
+    # NAO existe google_event_id: o evento usa event_id, ja presente.
+    service_id = Column(Integer, ForeignKey("services.id", ondelete="SET NULL"), nullable=True)
+    invite_sent_at = Column(TIMESTAMP(timezone=True), nullable=True)
     status = Column(String(20), nullable=False, server_default='SCHEDULED')
 
     # --- NOVAS COLUNAS DE STATUS DE SYNC ---
@@ -670,6 +689,7 @@ class Agendamento(Base):
 
     __table_args__ = (
         UniqueConstraint('client_id', 'lead_id', 'consulta_data', name='agendamento_lead_client_uniq'),
+        Index("idx_agendamentos_invite", "invite_sent_at"),
         # Agenda unica por profissional (migration 0008). Indice parcial: horario
         # cancelado volta a ficar livre, e agenda nula nao colide.
         Index(
@@ -686,6 +706,7 @@ class Agendamento(Base):
     lead = relationship("Lead", foreign_keys=[lead_id])
     company = relationship("Company", foreign_keys=[company_id])
     agenda = relationship("Agenda", foreign_keys=[agenda_id])
+    service = relationship("Service", foreign_keys=[service_id])
 
     @property
     def consulta_timezone(self) -> str:
@@ -2137,4 +2158,82 @@ class WhatsAppCampaignExecution(Base):
         Index('idx_whatsapp_campaign_exec_contact', 'contact_id'),
         Index('idx_whatsapp_campaign_exec_status', 'status'),
         UniqueConstraint('campaign_id', 'contact_id', name='uq_whatsapp_campaign_contact'),
+    )
+
+
+# =============================================================================
+# Agenda inteligente por profissional — migration 0009
+# Decisoes de 28/10: 1 profissional = 1 agenda; preco opcional; avaliacao
+# de diagnostico como servico de primeira classe.
+# =============================================================================
+
+class Service(Base):
+    """Catalogo de procedimentos da clinica."""
+
+    __tablename__ = "services"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"),
+                        nullable=False)
+    name = Column(String(160), nullable=False)
+    duration_minutes = Column(Integer, nullable=False, server_default=text("30"))
+    # Preco OPCIONAL: nulo significa que o agente nao cita valor ao paciente.
+    price_cents = Column(Integer, nullable=True)
+    # Marca a consulta de diagnostico. Todo procedimento passa por uma antes.
+    is_evaluation = Column(Boolean, nullable=False, server_default=text("false"))
+    active = Column(Boolean, nullable=False, server_default=text("true"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(),
+                        onupdate=func.now(), nullable=False)
+
+    company = relationship("Company", foreign_keys=[company_id])
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "name", name="uq_services_company_name"),
+        Index("idx_services_company_active", "company_id", "active"),
+        Index("idx_services_evaluation", "company_id", "is_evaluation"),
+    )
+
+
+class Professional(Base):
+    """Quem atende. O e-mail e obrigatorio: e o convidado do evento no Google."""
+
+    __tablename__ = "professionals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"),
+                        nullable=False)
+    name = Column(String(160), nullable=False)
+    email = Column(String(255), nullable=False)
+    phone = Column(String(30), nullable=True)
+    cro = Column(String(30), nullable=True)
+    active = Column(Boolean, nullable=False, server_default=text("true"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(),
+                        onupdate=func.now(), nullable=False)
+
+    company = relationship("Company", foreign_keys=[company_id])
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "email", name="uq_professionals_company_email"),
+        Index("idx_professionals_company_active", "company_id", "active"),
+    )
+
+
+class ProfessionalService(Base):
+    """Quem faz o que. A duracao efetiva respeita o override do profissional."""
+
+    __tablename__ = "professional_services"
+
+    professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="CASCADE"),
+                             primary_key=True)
+    service_id = Column(Integer, ForeignKey("services.id", ondelete="CASCADE"),
+                        primary_key=True)
+    duration_override_minutes = Column(Integer, nullable=True)
+
+    professional = relationship("Professional", foreign_keys=[professional_id])
+    service = relationship("Service", foreign_keys=[service_id])
+
+    __table_args__ = (
+        Index("idx_professional_services_service", "service_id"),
     )
