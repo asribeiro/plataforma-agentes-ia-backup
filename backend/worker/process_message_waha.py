@@ -50,6 +50,17 @@ WAHA_FILES_MARKER = "/api/files/"
 WAHA_MEDIA_ROUTE_PREFIX = "/api/waha/media/"
 
 
+def _waha_stanza_id(provider_message_id: Any) -> str:
+    value = str(provider_message_id or "").strip()
+    if not value.startswith(("true_", "false_")) or "_" not in value:
+        return ""
+
+    suffix = value.rsplit("_", 1)[-1].strip()
+    if not suffix or "@" in suffix:
+        return ""
+    return suffix
+
+
 def _company_openai_key_for_media(db: Session, company_id: int) -> str:
     try:
         return get_company_openai_api_key(db, int(company_id))
@@ -185,6 +196,26 @@ def _flow_result_error(flow_result: Optional[Dict[str, Any]]) -> str:
     return "FlowBuilder falhou"
 
 
+def tipo_aceita_conteudo_vazio(msg_type: str) -> bool:
+    """Tipos que podem chegar legitimamente sem texto no corpo.
+
+    O guard de persistencia descartava qualquer mensagem sem `content`, mas midia
+    no WhatsApp chega com corpo vazio e o arquivo em campo separado (ex.: nota de
+    voz chega como `ptt`, e o mapa de tipos traduz para `audio`).
+    """
+    return msg_type in TIPOS_COM_CONTEUDO_OPCIONAL
+
+
+TIPOS_COM_CONTEUDO_OPCIONAL = (
+    "contact",   # vCard: conteudo e o nome
+    "audio",     # nota de voz (ptt) e audio enviado
+    "image",
+    "video",
+    "file",      # documento (o mapa traduz "document" -> "file")
+    "sticker",
+    "location",  # lat/long vem em campo proprio
+)
+
 def _waha_payload_summary(waha_payload: Dict[str, Any]) -> Dict[str, Any]:
     payload = waha_payload.get("payload", {}) if isinstance(waha_payload, dict) else {}
     _data = payload.get("_data", {}) if isinstance(payload, dict) else {}
@@ -290,23 +321,37 @@ def _waha_media_url(payload: Dict[str, Any]) -> str:
 
 
 def _waha_text_body(payload: Dict[str, Any]) -> str:
+    message_data = payload.get("_data", {}).get("Message", {})
+    candidates: List[str] = []
+
     body = payload.get("body")
     if body:
-        return str(body)
+        candidates.append(str(body))
 
-    message_data = payload.get("_data", {}).get("Message", {})
-    if not isinstance(message_data, dict):
+    if isinstance(message_data, dict):
+        conversation = message_data.get("conversation")
+        if conversation:
+            candidates.append(str(conversation))
+
+        extended_text = (
+            message_data.get("extendedTextMessage", {}).get("text")
+            if isinstance(message_data.get("extendedTextMessage"), dict)
+            else None
+        )
+        if extended_text:
+            candidates.append(str(extended_text))
+
+    if not candidates:
         return ""
 
-    for candidate in (
-        message_data.get("conversation"),
-        message_data.get("extendedTextMessage", {}).get("text")
-        if isinstance(message_data.get("extendedTextMessage"), dict)
-        else None,
-    ):
-        if candidate:
-            return str(candidate)
-    return ""
+    def _text_score(value: str) -> tuple[int, int]:
+        # Preferir texto mais completo e, em empate, preservar caracteres
+        # não-ASCII (incluindo emojis) quando presentes no payload WAHA.
+        non_ascii_count = sum(1 for character in value if ord(character) > 127)
+        return (len(value), non_ascii_count)
+
+    best_text = max(candidates, key=_text_score)
+    return best_text
 
 
 def _message_tracker_content_for_check(msg_type: str, normalized_data: Dict[str, Any], content: Any) -> Any:
@@ -571,10 +616,36 @@ def normalize_waha_payload(waha_data: Dict[str, Any]) -> Dict[str, Any]:
     to_field = payload.get("to", "")
     from_me = payload.get("fromMe", False)
 
-    # 🔥 CORREÇÃO: Se for mensagem enviada (fromMe=True), o contato é o destinatário (to)
-    if from_me and to_field:
-        phone = _clean_waha_chat_id(to_field)
-        logger.info(f"[WAHA Normalize] Mensagem enviada (fromMe), usando destinatário: {phone}")
+    # 🔥 CORREÇÃO: Se for mensagem enviada (fromMe=True), o contato é o destinatário.
+    # Algumas variações de payload WAHA não trazem `to`, então tentamos múltiplos
+    # campos de destino antes de cair em heurísticas de recebimento.
+    if from_me:
+        recipient_candidates = [
+            to_field,
+            payload.get("chatId", ""),
+            payload.get("recipient", ""),
+            payload.get("toId", ""),
+            payload.get("_data", {}).get("id", {}).get("remote", ""),
+        ]
+        normalized_recipient = ""
+        for candidate in recipient_candidates:
+            cleaned_candidate = _clean_waha_chat_id(candidate)
+            if cleaned_candidate:
+                normalized_recipient = cleaned_candidate
+                break
+
+        if normalized_recipient:
+            phone = normalized_recipient
+            logger.info(
+                "[WAHA Normalize] Mensagem enviada (fromMe), destinatário resolvido: %s",
+                phone,
+            )
+        else:
+            phone = _clean_waha_chat_id(from_field)
+            logger.warning(
+                "[WAHA Normalize] fromMe sem destinatário explícito; fallback para 'from': %s",
+                phone,
+            )
 
     # Extrair telefone real do SenderAlt (formato: "5500000000004:96@s.whatsapp.net")
     elif sender_alt and "@s.whatsapp.net" in sender_alt:
@@ -1687,12 +1758,18 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
         # IMPORTANTE: isso precisa rodar para mensagens recebidas também (from_api=False),
         # caso contrário elas não são persistidas na tabela messages.
         zapi_message_id = message_id  # Usar message_id do WAHA
+        stanza_id = _waha_stanza_id(zapi_message_id)
         existing = db.execute(text("""
                 SELECT id, message_type, content, sender_name
                 FROM messages
                 WHERE zapi_message_id = :zapi_message_id
+                   OR (:stanza_id != '' AND zapi_message_id = :stanza_id)
+                ORDER BY id DESC
                 LIMIT 1
-        """), {"zapi_message_id": zapi_message_id}).fetchone()
+        """), {
+            "zapi_message_id": zapi_message_id,
+            "stanza_id": stanza_id,
+        }).fetchone()
 
         if not existing:
             try:
@@ -1704,7 +1781,9 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
                     # ---------------------------------------------------------
 
                     # 🔥 GUARD CLAUSE: Impedir salvamento de mensagens unknown ou vazias
-                    if msg_type == 'unknown' or (not content and msg_type != 'contact'):
+                    if msg_type == 'unknown' or (
+                        not content and not tipo_aceita_conteudo_vazio(msg_type)
+                    ):
                         logger.warning(f"[WAHA Task] 🛑 BLOQUEANDO salvamento de mensagem inválida: type={msg_type}, content_len={len(str(content)) if content else 0}")
                         if audit_id:
                             update_audit_status(db, audit_id, "ignored", error="Tipo desconhecido ou contudo vazio")
@@ -1726,7 +1805,7 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
                         "sender_name": sender_name_db,
                         "from_me": from_me,
                         "zapi_message_id": zapi_message_id,
-                        "delivery_status": "sent" if from_me else None,
+                        "delivery_status": "sending" if from_me else None,
                         "reply_to": json.dumps(reply_to_metadata) if reply_to_metadata else None,
                     })
 
@@ -1761,8 +1840,13 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
                             SELECT id, message_type, content, sender_name
                             FROM messages
                             WHERE zapi_message_id = :zapi_message_id
+                               OR (:stanza_id != '' AND zapi_message_id = :stanza_id)
+                            ORDER BY id DESC
                             LIMIT 1
-                    """), {"zapi_message_id": zapi_message_id}).fetchone()
+                    """), {
+                        "zapi_message_id": zapi_message_id,
+                        "stanza_id": stanza_id,
+                    }).fetchone()
                 else:
                     # Outro erro - propagar
                     raise
@@ -1993,10 +2077,11 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
                     # Criar novo contato para esta empresa
                     db.execute(text("""
                         INSERT INTO contacts
-                            (client_id, company_id, phone, name, sender_lid, source_id, thumbnail_url, last_message_at)
-                        VALUES (:client_id, :company_id, :phone, :name, :sender_lid, :source_id, :thumbnail_url, NOW())
+                            (client_id, company_id, phone, name, human_mode, sender_lid, source_id, thumbnail_url, last_message_at)
+                        VALUES (:client_id, :company_id, :phone, :name, false, :sender_lid, :source_id, :thumbnail_url, NOW())
                         ON CONFLICT (client_id, company_id, phone) DO UPDATE
                         SET name = EXCLUDED.name,
+                            human_mode = COALESCE(contacts.human_mode, false),
                             sender_lid = EXCLUDED.sender_lid,
                             source_id = EXCLUDED.source_id,
                             thumbnail_url = EXCLUDED.thumbnail_url,
@@ -2047,8 +2132,8 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
                 # Criar novo contato
                 db.execute(text("""
                     INSERT INTO contacts
-                        (client_id, company_id, phone, name, sender_lid, source_id, thumbnail_url, last_message_at)
-                    VALUES (:client_id, :company_id, :phone, :name, :sender_lid, :source_id, :thumbnail_url, NOW())
+                        (client_id, company_id, phone, name, human_mode, sender_lid, source_id, thumbnail_url, last_message_at)
+                    VALUES (:client_id, :company_id, :phone, :name, false, :sender_lid, :source_id, :thumbnail_url, NOW())
                 """), {
                     "client_id": client_id_db,
                     "company_id": company_id,

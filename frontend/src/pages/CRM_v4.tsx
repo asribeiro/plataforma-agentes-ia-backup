@@ -535,76 +535,119 @@ export default function CRMv4() {
   // Colunas que não podem ser removidas
   const COLUNAS_PROTEGIDAS = ['novo_lead'];
 
+  const buildCustomColumnsFromStages = (stages: any[]) => {
+    return (stages || [])
+      .filter(stage => !COLUNAS_PADRAO.some(col => col.id === stage.id.toString()))
+      .map(stage => ({
+        id: stage.id.toString(),
+        title: stage.name,
+        color: stage.color || 'border-yellow-500',
+        order: stage.order,
+        stageId: stage.id,
+        percentageBaseStageId: stage.percentage_base_stage_id ?? null,
+      }))
+      .sort((a, b) => a.order - b.order);
+  };
+
+  const loadPipelineContext = async () => {
+    const pipelines = await pipelineApi.getPipelines();
+    const activePipelineId = pipelines?.[0]?.id;
+
+    if (activePipelineId) {
+      const stages = await pipelineApi.getStages(activePipelineId);
+      if (stages?.length) {
+        return { pipelineId: activePipelineId, stages };
+      }
+    }
+
+    const { companyId } = getAuthIds();
+    if (companyId) {
+      const kanban = await pipelineApi.getKanbanData(companyId, activePipelineId);
+      if (kanban?.pipeline?.id && kanban?.stages?.length) {
+        return {
+          pipelineId: kanban.pipeline.id,
+          stages: kanban.stages,
+        };
+      }
+    }
+
+    return {
+      pipelineId: activePipelineId,
+      stages: [],
+    };
+  };
+
   // Carregar dados iniciais - executar apenas uma vez na montagem
   useEffect(() => {
     const loadInitialData = async () => {
+      let frontendLeads: Lead[] = [];
       try {
         setLoading(true);
         setError(null);
 
-        // 1. Carregar Leads da tabela leads
-        const backendLeads = await crmApi.getLeads();
-
-        // 2. Carregar tasks para os leads (em batch)
-        const phones = [...new Set(backendLeads.map(lead => lead.phone).filter((phone): phone is string => Boolean(phone)))];
-        let tasksMap: Record<string, any> = {};
-
         try {
-          const tasks = await crmApi.getNextTasksBatch(phones);
-          tasksMap = tasks.reduce((acc, task) => {
-            acc[task.phone] = task;
-            return acc;
-          }, {});
-        } catch (taskError) {
-          console.warn('⚠️ Erro ao carregar tasks (continuando sem tasks):', taskError);
-        }
+          // 1. Carregar Leads da tabela leads
+          const backendLeads = await crmApi.getLeads();
 
-        // 2.5. Carregar agendamentos para mostrar consulta_data nos cards
-        let agendamentosMap: Record<string, {
-          consulta_data: string;
-          consulta_data_display?: string;
-          consulta_timezone?: string;
-        }> = {};
-        try {
-          const { clientId, companyId } = getAuthIds();
-          if (clientId && companyId) {
-            const response = await api.get(`/api/agenda/clients/${clientId}/companies/${companyId}/agendamentos`);
-            const agendamentos = response.data || [];
-            // Mapear phone -> consulta_data mais próxima (futura)
-            const now = new Date();
-            agendamentos.forEach((ag: any) => {
-              if (ag.phone && ag.consulta_data) {
-                const agDate = new Date(ag.consulta_data);
-                // Normalizar telefone (últimos 10-11 dígitos)
-                const normalizedPhone = ag.phone.replace(/\D/g, '').slice(-11);
-                // Se ainda não tem ou se a data é mais próxima (e futura), usar esta
-                if (!agendamentosMap[normalizedPhone] || (agDate > now && agDate < new Date(agendamentosMap[normalizedPhone].consulta_data))) {
-                  agendamentosMap[normalizedPhone] = {
-                    consulta_data: ag.consulta_data,
-                    consulta_data_display: ag.consulta_data_display,
-                    consulta_timezone: ag.consulta_timezone
-                  };
-                }
-              }
-            });
-            console.log(`✅ Agendamentos carregados: ${Object.keys(agendamentosMap).length} mapeados`);
+          // 2. Carregar tasks para os leads (em batch)
+          const phones = [...new Set(backendLeads.map(lead => lead.phone).filter((phone): phone is string => Boolean(phone)))];
+          let tasksMap: Record<string, any> = {};
+
+          try {
+            const tasks = await crmApi.getNextTasksBatch(phones);
+            tasksMap = tasks.reduce((acc, task) => {
+              acc[task.phone] = task;
+              return acc;
+            }, {});
+          } catch (taskError) {
+            console.warn('⚠️ Erro ao carregar tasks (continuando sem tasks):', taskError);
           }
-        } catch (agError) {
-          console.warn('⚠️ Erro ao carregar agendamentos (continuando sem):', agError);
-        }
 
-        // 3. Mapear leads para frontend incluindo nextTask e consulta_data
-        const frontendLeads = backendLeads.map(mapBackendLeadToFrontend).map(lead => {
-          const normalizedLeadPhone = lead.phone.replace(/\D/g, '').slice(-11);
-          const agendamento = agendamentosMap[normalizedLeadPhone];
-          return {
-            ...lead,
-            nextTask: tasksMap[lead.phone] || undefined,
-            consulta_data: agendamento?.consulta_data,
-            consulta_data_display: agendamento?.consulta_data_display,
-            consulta_timezone: agendamento?.consulta_timezone
-          };
-        });
+          // 2.5. Carregar agendamentos para mostrar consulta_data nos cards
+          let agendamentosMap: Record<string, {
+            consulta_data: string;
+            consulta_data_display?: string;
+            consulta_timezone?: string;
+          }> = {};
+          try {
+            const { clientId, companyId } = getAuthIds();
+            if (clientId && companyId) {
+              const response = await api.get(`/api/agenda/clients/${clientId}/companies/${companyId}/agendamentos`);
+              const agendamentos = response.data || [];
+              const now = new Date();
+              agendamentos.forEach((ag: any) => {
+                if (ag.phone && ag.consulta_data) {
+                  const agDate = new Date(ag.consulta_data);
+                  const normalizedPhone = ag.phone.replace(/\D/g, '').slice(-11);
+                  if (!agendamentosMap[normalizedPhone] || (agDate > now && agDate < new Date(agendamentosMap[normalizedPhone].consulta_data))) {
+                    agendamentosMap[normalizedPhone] = {
+                      consulta_data: ag.consulta_data,
+                      consulta_data_display: ag.consulta_data_display,
+                      consulta_timezone: ag.consulta_timezone
+                    };
+                  }
+                }
+              });
+              console.log(`✅ Agendamentos carregados: ${Object.keys(agendamentosMap).length} mapeados`);
+            }
+          } catch (agError) {
+            console.warn('⚠️ Erro ao carregar agendamentos (continuando sem):', agError);
+          }
+
+          frontendLeads = backendLeads.map(mapBackendLeadToFrontend).map(lead => {
+            const normalizedLeadPhone = lead.phone.replace(/\D/g, '').slice(-11);
+            const agendamento = agendamentosMap[normalizedLeadPhone];
+            return {
+              ...lead,
+              nextTask: tasksMap[lead.phone] || undefined,
+              consulta_data: agendamento?.consulta_data,
+              consulta_data_display: agendamento?.consulta_data_display,
+              consulta_timezone: agendamento?.consulta_timezone
+            };
+          });
+        } catch (leadError) {
+          console.warn('⚠️ Erro ao carregar leads (continuando para carregar etapas):', leadError);
+        }
 
         setLeads(frontendLeads);
 
@@ -612,43 +655,18 @@ export default function CRMv4() {
         let allColumns = [...COLUNAS_PADRAO];
 
         try {
-          // Tentar buscar estágios do pipeline do banco
-          let pipelineId = 1;
-          try {
-            const pipelines = await pipelineApi.getPipelines();
-            if (pipelines && pipelines.length > 0) {
-              pipelineId = pipelines[0].id;
+          const { stages } = await loadPipelineContext();
+          if (stages?.length) {
+            const customStages = buildCustomColumnsFromStages(stages);
 
-              // Buscar estágios do pipeline
-              const stages = await pipelineApi.getStages(pipelineId);
-              if (stages && stages.length > 0) {
-                // Filtrar estágios que não são colunas padrão
-                const customStages = stages
-                  .filter(stage => !COLUNAS_PADRAO.some(col => col.id === stage.id.toString()))
-                  .map(stage => ({
-                    id: stage.id.toString(),
-                    title: stage.name,
-                    color: stage.color || 'border-yellow-500',
-                    order: stage.order,
-                    stageId: stage.id,
-                    percentageBaseStageId: stage.percentage_base_stage_id ?? null
-                  }))
-                  .sort((a, b) => a.order - b.order);
+            const novoLeadIndex = allColumns.findIndex(col => col.id === 'novo_lead');
+            const insertIndex = novoLeadIndex + 1;
 
-                // Encontrar posição de inserção (depois de "Novo Lead")
-                const novoLeadIndex = allColumns.findIndex(col => col.id === 'novo_lead');
-                const insertIndex = novoLeadIndex + 1;
-
-                // Inserir estágios personalizados entre "Novo Lead" e "Ganhou/Perdido"
-                allColumns = [
-                  ...allColumns.slice(0, insertIndex),
-                  ...customStages,
-                  ...allColumns.slice(insertIndex)
-                ];
-              }
-            }
-          } catch (pipelineError) {
-            console.warn('Falha ao buscar estágios do pipeline, usando apenas colunas padrão:', pipelineError);
+            allColumns = [
+              ...allColumns.slice(0, insertIndex),
+              ...customStages,
+              ...allColumns.slice(insertIndex)
+            ];
           }
         } catch (error) {
           console.warn('Erro ao carregar estágios personalizados:', error);
@@ -824,23 +842,11 @@ export default function CRMv4() {
     if (!newColumnName.trim()) return;
 
     try {
-      // Obter IDs do localStorage
-      const { clientId, companyId } = getAuthIds();
-      if (!clientId || !companyId) {
-        throw new Error('IDs de cliente ou empresa não encontrados');
-      }
-
       // Primeiro, buscar ou criar um pipeline para esta empresa
-      let pipelineId = 1; // Default
-      try {
-        const pipelines = await pipelineApi.getPipelines();
-        if (pipelines && pipelines.length > 0) {
-          pipelineId = pipelines[0].id;
-        } else {
-          console.warn('Nenhum pipeline encontrado, usando ID padrão');
-        }
-      } catch (e) {
-        console.warn('Falha ao carregar pipelines, usando ID padrão', e);
+      const { pipelineId } = await loadPipelineContext();
+      if (!pipelineId) {
+        showNotification('error', 'Nenhum pipeline ativo encontrado para adicionar a etapa.');
+        return;
       }
 
       // Criar nova etapa no backend
@@ -1546,43 +1552,18 @@ export default function CRMv4() {
         let allColumns = [...COLUNAS_PADRAO];
 
         try {
-          // Tentar buscar estágios do pipeline do banco
-          let pipelineId = 1;
-          try {
-            const pipelines = await pipelineApi.getPipelines();
-            if (pipelines && pipelines.length > 0) {
-              pipelineId = pipelines[0].id;
+          const { stages } = await loadPipelineContext();
+          if (stages?.length) {
+            const customStages = buildCustomColumnsFromStages(stages);
 
-              // Buscar estágios do pipeline
-              const stages = await pipelineApi.getStages(pipelineId);
-              if (stages && stages.length > 0) {
-                // Filtrar estágios que não são colunas padrão
-                const customStages = stages
-                  .filter(stage => !COLUNAS_PADRAO.some(col => col.id === stage.id.toString()))
-                  .map(stage => ({
-                    id: stage.id.toString(),
-                    title: stage.name,
-                    color: stage.color || 'border-yellow-500',
-                    order: stage.order,
-                    stageId: stage.id,
-                    percentageBaseStageId: stage.percentage_base_stage_id ?? null
-                  }))
-                  .sort((a, b) => a.order - b.order);
+            const novoLeadIndex = allColumns.findIndex(col => col.id === 'novo_lead');
+            const insertIndex = novoLeadIndex + 1;
 
-                // Encontrar posição de inserção (depois de "Novo Lead")
-                const novoLeadIndex = allColumns.findIndex(col => col.id === 'novo_lead');
-                const insertIndex = novoLeadIndex + 1;
-
-                // Inserir estágios personalizados entre "Novo Lead" e "Ganhou/Perdido"
-                allColumns = [
-                  ...allColumns.slice(0, insertIndex),
-                  ...customStages,
-                  ...allColumns.slice(insertIndex)
-                ];
-              }
-            }
-          } catch (pipelineError) {
-            console.warn('Falha ao buscar estágios do pipeline, usando apenas colunas padrão:', pipelineError);
+            allColumns = [
+              ...allColumns.slice(0, insertIndex),
+              ...customStages,
+              ...allColumns.slice(insertIndex)
+            ];
           }
         } catch (error) {
           console.warn('Erro ao carregar estágios personalizados:', error);

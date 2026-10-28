@@ -49,8 +49,8 @@ class PipelineService:
 
 
     @staticmethod
-    def ensure_standard_stages_for_pipeline(pipeline_id: int, db: Session) -> None:
-        """Garante que pipeline tenha etapas padrão: 'Ganhou' e 'Perdido'"""
+    def ensure_standard_stages_for_pipeline(pipeline_id: int, db: Session) -> List[str]:
+        """Garante etapas padrão no pipeline e retorna quais foram criadas."""
 
         # Verificar se já existem etapas convertidas/perdidas
         existing_converted = db.query(PipelineStage).filter(
@@ -68,6 +68,8 @@ class PipelineService:
             PipelineStage.pipeline_id == pipeline_id
         ).scalar() or 0
 
+        created_stages: List[str] = []
+
         # Criar etapa "Ganhou" se não existir
         if not existing_converted:
             converted_stage = PipelineStage(
@@ -81,6 +83,7 @@ class PipelineService:
                 is_lost_stage=False
             )
             db.add(converted_stage)
+            created_stages.append("Ganhou")
 
         # Criar etapa "Perdido" se não existir
         if not existing_lost:
@@ -95,8 +98,12 @@ class PipelineService:
                 is_lost_stage=True
             )
             db.add(lost_stage)
+            created_stages.append("Perdido")
 
-        db.commit()
+        if created_stages:
+            db.commit()
+
+        return created_stages
 
     @staticmethod
     def get_initial_stage_for_pipeline(pipeline_id: int, db: Session) -> Optional[PipelineStage]:

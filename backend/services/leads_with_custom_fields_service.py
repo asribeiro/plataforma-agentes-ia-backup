@@ -443,7 +443,11 @@ class LeadsWithCustomFieldsService:
 
         return LeadWithCustomFieldsResponse(
             id=lead.id,
-            client_id=int(lead.client_id) if lead.client_id and lead.client_id.isdigit() else None,
+            client_id=(
+                int(str(lead.client_id))
+                if lead.client_id is not None and str(lead.client_id).isdigit()
+                else None
+            ),
             company_id=lead.company_id,
             name=lead.name,
             phone=lead.phone,

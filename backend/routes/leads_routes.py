@@ -775,6 +775,7 @@ async def deletar_lead(
 # =========================
 
 @router.post("/", response_model=LeadWithCustomFieldsResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/with-custom-fields", response_model=LeadWithCustomFieldsResponse, status_code=status.HTTP_201_CREATED)
 async def criar_lead_com_custom_fields(
     client_id: int,
     company_id: int,
@@ -813,6 +814,7 @@ async def criar_lead_com_custom_fields(
 
 
 @router.put("/{lead_id}", response_model=LeadWithCustomFieldsResponse)
+@router.put("/{lead_id}/with-custom-fields", response_model=LeadWithCustomFieldsResponse)
 async def atualizar_lead_com_custom_fields(
     client_id: int,
     company_id: int,

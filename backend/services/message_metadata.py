@@ -85,12 +85,16 @@ def _find_message_by_waha_stanza_id(
           AND from_me = true
           AND zapi_message_id IS NOT NULL
           AND zapi_message_id != :provider_message_id
-          AND zapi_message_id LIKE :stanza_pattern ESCAPE '!'
+          AND (
+                zapi_message_id = :stanza_id
+                OR zapi_message_id LIKE :stanza_pattern ESCAPE '!'
+          )
         ORDER BY id DESC
         LIMIT 2
     """), {
         "company_id": company_id,
         "provider_message_id": provider_message_id,
+        "stanza_id": stanza_id,
         "stanza_pattern": f"%!_{_escape_sql_like(stanza_id)}",
     }).fetchall()
 

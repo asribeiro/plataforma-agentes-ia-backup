@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, timedelta
@@ -12,7 +13,8 @@ from backend.worker.celery_app import app
 
 logger = logging.getLogger(__name__)
 
-redis_client = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+_redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+redis_client = redis.Redis.from_url(_redis_url, decode_responses=True)
 
 DEBOUNCE_KEY_PREFIX = "agent_workforce_debounce"
 MAX_RESPONSE_DELAY_SECONDS = 60

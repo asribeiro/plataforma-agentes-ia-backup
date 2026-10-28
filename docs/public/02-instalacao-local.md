@@ -118,3 +118,25 @@ curl -fsS http://127.0.0.1:8002/health/db-connections
 ```
 
 Depois, abra o frontend, entre com o administrador criado e confirme que a tela inicial carrega sem erros no console do navegador.
+
+## 9. (Opcional) Stack isolada com Docker Compose
+
+Para subir `web`, `api`, `postgres` e `redis` via Compose usando o arquivo raiz `compose.yml`, ajuste antes o `.env.docker`:
+
+```dotenv
+WEB_BIND_HOST=0.0.0.0
+WEB_PORT=8083
+API_BIND_HOST=0.0.0.0
+API_PORT=8002
+```
+
+Depois:
+
+```bash
+docker compose --env-file .env.docker up -d --build
+docker compose --env-file .env.docker ps
+```
+
+No exemplo acima, o frontend fica em `http://SEU_HOST:8083` e a API em `http://SEU_HOST:8002`.
+
+Se precisar de HTTPS no acesso externo, use o serviço `edge` descrito em [Deploy no servidor](06-deploy.md).

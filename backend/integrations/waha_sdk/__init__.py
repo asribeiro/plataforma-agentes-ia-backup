@@ -615,7 +615,33 @@ class WAHAClient:
     def resolve_chat_id(self, session: str, phone: str) -> str:
         clean_phone = ''.join(filter(str.isdigit, str(phone)))
         if clean_phone.startswith('55'):
-            return self.get_correct_chat_id(session, clean_phone)
+            chat_id = self.get_correct_chat_id(session, clean_phone)
+
+            # Alguns ambientes retornam @lid em checkNumberStatus, porém o envio
+            # pode falhar com ack ERROR. Nesses casos tentamos resolver o LID para
+            # o número real e forçamos @c.us como destino.
+            if isinstance(chat_id, str) and chat_id.endswith('@lid'):
+                resolved_phone = self.get_phone_by_lid(session, chat_id)
+                if resolved_phone:
+                    fallback_chat_id = f"{resolved_phone}@c.us"
+                    logger.info(
+                        "[WAHA] chatId @lid convertido para @c.us: %s -> %s",
+                        chat_id,
+                        fallback_chat_id,
+                    )
+                    return fallback_chat_id
+
+                # Fallback final: quando não for possível resolver o LID,
+                # enviar para o número original normalizado em @c.us.
+                fallback_chat_id = f"{clean_phone}@c.us"
+                logger.warning(
+                    "[WAHA] LID não resolvido; fallback para número original: %s -> %s",
+                    chat_id,
+                    fallback_chat_id,
+                )
+                return fallback_chat_id
+
+            return chat_id
         return self._format_chat_id(phone)
 
     def start_typing(self, session: str, phone: str) -> Dict[str, Any]:

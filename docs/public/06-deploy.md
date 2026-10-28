@@ -232,3 +232,42 @@ Antes de atualizar:
 7. repita o checklist pós-clone.
 
 Nunca use `git reset --hard`, apague o banco ou restaure um dump sobre produção como procedimento comum de deploy.
+
+## 9. Observação para deploy com Docker Compose
+
+Se você optar por publicar a stack com o `compose.yml` da raiz (em vez de systemd + Nginx), controle bind e portas por variáveis no `.env.docker`:
+
+```dotenv
+WEB_BIND_HOST=0.0.0.0
+WEB_PORT=8083
+API_BIND_HOST=0.0.0.0
+API_PORT=8002
+```
+
+- `WEB_BIND_HOST`/`WEB_PORT` controlam a publicação do frontend.
+- `API_BIND_HOST`/`API_PORT` controlam a publicação da API FastAPI.
+
+Para servir em HTTPS direto no Compose, use o serviço `edge` (Caddy com Let's Encrypt):
+
+```dotenv
+PUBLIC_DOMAIN=app.seudominio.com.br
+ACME_EMAIL=ops@seudominio.com.br
+EDGE_HTTP_BIND_HOST=0.0.0.0
+EDGE_HTTP_PORT=80
+EDGE_HTTPS_BIND_HOST=0.0.0.0
+EDGE_HTTPS_PORT=443
+```
+
+Suba a stack:
+
+```bash
+docker compose --env-file .env.docker up -d --build edge web api postgres redis worker beat
+```
+
+Pré-requisitos para o certificado automático:
+
+- `PUBLIC_DOMAIN` deve apontar por DNS para o IP público do servidor.
+- Portas `80/tcp` e `443/tcp` devem estar liberadas no firewall/security group.
+- Evite outro serviço ocupando `80`/`443` no host.
+
+Com isso, o acesso recomendado passa a ser `https://PUBLIC_DOMAIN`.

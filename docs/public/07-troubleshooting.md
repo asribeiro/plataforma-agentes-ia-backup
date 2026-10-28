@@ -108,6 +108,38 @@ Use Node `20.19+` ou `22.12+`. Não altere o lockfile nem faça downgrade de Vit
 - não reutilize sessões de outra instalação;
 - preserve o volume da sessão em reinícios do container/serviço.
 
+## CRM: etapas não aparecem no Kanban ou não consigo criar etapa
+
+Se o board do CRM carregar sem as etapas persistidas (`Ganhou`/`Perdido`) ou bloquear criação de novas etapas, siga exatamente esta sequência:
+
+1. Confirmar serviços no ar com o arquivo de ambiente:
+
+```bash
+docker compose --env-file .env.docker ps
+```
+
+2. Rebuild apenas API e frontend:
+
+```bash
+docker compose --env-file .env.docker up -d --build api web
+```
+
+3. Forçar bootstrap mínimo do pipeline da empresa (exemplo `company_id=1`):
+
+```bash
+docker compose --env-file .env.docker exec api python -c "from backend.db import SessionLocal; from backend.services.pipeline_service import PipelineService; db=SessionLocal(); PipelineService.create_minimal_pipeline_for_company(1, db, None); db.close(); print('ok')"
+```
+
+4. Validar logs de pipeline/kanban após abrir a tela CRM:
+
+```bash
+docker compose --env-file .env.docker logs --tail=300 api | grep -Ei "pipelines|stages|kanban|403|401|422|500|erro|error"
+```
+
+5. Se as rotas responderem `200`, mas o board ainda vier vazio, faça logout/login e recarregue a página sem cache.
+
+Se persistir, colete os comandos acima e abra um incidente com `company_id`, horário do teste e rota acessada.
+
 ## Onde coletar evidências
 
 ```bash

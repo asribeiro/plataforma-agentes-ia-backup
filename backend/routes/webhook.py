@@ -211,6 +211,84 @@ def _lock_operational_whatsapp_company(db: Session, company_id: int) -> None:
         ) from exc
 
 
+def _normalize_contact_phone_for_storage(db: Session, company_id: int, phone: str) -> str:
+    """Normaliza identificador de destino para o telefone canônico do contato."""
+    raw_phone = str(phone or "").strip()
+    if not raw_phone:
+        return ""
+
+    clean_phone = (
+        raw_phone
+        .replace("@c.us", "")
+        .replace("@s.whatsapp.net", "")
+        .replace("@g.us", "")
+        .replace("@lid", "")
+    )
+
+    try:
+        row = db.execute(text("""
+            SELECT phone
+            FROM contacts
+            WHERE company_id = :company_id
+              AND (
+                phone = :raw_phone
+                OR phone = :clean_phone
+                OR sender_lid = :raw_phone
+                OR sender_lid = :clean_lid
+              )
+            ORDER BY last_message_at DESC NULLS LAST, id DESC
+            LIMIT 1
+        """), {
+            "company_id": company_id,
+            "raw_phone": raw_phone,
+            "clean_phone": clean_phone,
+            "clean_lid": f"{clean_phone}@lid",
+        }).fetchone()
+        if row and getattr(row, "phone", None):
+            canonical = str(row.phone).strip()
+            if canonical and canonical != raw_phone:
+                logger.info(
+                    "[Webhook] Normalizando phone de saída: raw=%s canonical=%s",
+                    raw_phone,
+                    canonical,
+                )
+            return canonical or clean_phone
+    except Exception as exc:
+        logger.warning("[Webhook] Falha ao normalizar phone para storage: %s", exc)
+
+    return clean_phone
+
+
+def _extract_provider_message_id(result: Any) -> Optional[str]:
+    """Extrai providerMessageId de respostas heterogêneas de providers."""
+    if not isinstance(result, dict):
+        return None
+
+    queue: List[Any] = [result]
+    visited: set[int] = set()
+    priority_keys = ("providerMessageId", "messageId", "id")
+
+    while queue:
+        current = queue.pop(0)
+        if not isinstance(current, dict):
+            continue
+        oid = id(current)
+        if oid in visited:
+            continue
+        visited.add(oid)
+
+        for key in priority_keys:
+            value = current.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        for value in current.values():
+            if isinstance(value, dict):
+                queue.append(value)
+
+    return None
+
+
 # ==========================================
 # FUNÇÕES AUXILIARES (Z-API)
 # ==========================================
@@ -706,9 +784,9 @@ def send_text(
       { "phone": "5500000000007", "message": "Olá!" }
     """
     _require_whatsapp_scope(user, client_id, company_id, db)
-
+    canonical_phone = _normalize_contact_phone_for_storage(db, company_id, body.phone)
     reply_metadata = normalize_reply_request(body.replyTo)
-    provider_reply_to = resolve_waha_reply_to_id(db, company_id, body.phone, body.replyTo)
+    provider_reply_to = resolve_waha_reply_to_id(db, company_id, canonical_phone, body.replyTo)
 
     # 1) Registrar no BD (PRIMEIRO) para garantir persistência e permitir ACK posterior
     inserted_message_id = None
@@ -724,7 +802,7 @@ def send_text(
         """), {
             "client_id": client_id,        # <-- agora vem do query param
             "company_id": company_id,
-            "contact_phone": body.phone,
+            "contact_phone": canonical_phone,
             "message_type": "text",
             "content": body.message,
             "sender_phone": "me",
@@ -746,20 +824,20 @@ def send_text(
     try:
         result = provider_send_text(
             company_id=company_id,
-            phone=body.phone,
+            phone=canonical_phone,
             message=body.message,
             db=None,  # Não salvar novamente
             human_mode=True,
             reply_to=provider_reply_to
         )
 
-        provider_message_id = result.get("id") or result.get("messageId")
+        provider_message_id = _extract_provider_message_id(result)
         if provider_message_id and inserted_message_id:
             db.execute(text("""
                 UPDATE messages
                 SET zapi_message_id = :provider_message_id,
-                    delivery_status = 'sent',
-                    delivery_ack = 1,
+                    delivery_status = 'sending',
+                    delivery_ack = NULL,
                     delivery_status_updated_at = NOW()
                 WHERE id = :id
             """), {
@@ -771,9 +849,9 @@ def send_text(
                 db=db,
                 company_id=company_id,
                 provider_message_id=provider_message_id,
-                status="sent",
-                ack=1,
-                ack_name="SERVER",
+                status="sending",
+                ack=None,
+                ack_name="PENDING",
                 local_message_id=body.localMessageId,
                 publish=True,
             )
@@ -815,8 +893,8 @@ def send_message_reaction(
     Use reaction="" para remover a reação atual.
     """
     _require_whatsapp_scope(user, client_id, company_id, db)
-
-    provider_message_id = resolve_waha_reply_to_id(db, company_id, body.phone, {
+    canonical_phone = _normalize_contact_phone_for_storage(db, company_id, body.phone)
+    provider_message_id = resolve_waha_reply_to_id(db, company_id, canonical_phone, {
         "id": body.messageId,
         "providerMessageId": body.messageId,
     })
@@ -866,6 +944,7 @@ def send_image(
     Body: { phone, image, caption?, ... }
     """
     _require_whatsapp_scope(user, client_id, company_id, db)
+    canonical_phone = _normalize_contact_phone_for_storage(db, company_id, body.phone)
 
     # Importar o tracker de mensagens
     from backend.integrations.message_tracker import message_tracker
@@ -932,7 +1011,7 @@ def send_image(
         """), {
             "client_id": client_id,
             "company_id": company_id,
-            "contact_phone": body.phone,
+            "contact_phone": canonical_phone,
             "content": body.image  # salvando o link/base64 original
         }).fetchone()
         inserted_message_id = inserted.id if inserted else None
@@ -947,20 +1026,20 @@ def send_image(
     try:
         result = send_image(
             company_id=company_id,
-            phone=body.phone,
+            phone=canonical_phone,
             image_bytes=image_bytes,
             image_path=image_path,
             db=None,  # Não salvar novamente
             caption=body.caption
         )
 
-        provider_message_id = result.get("id") or result.get("messageId")
+        provider_message_id = _extract_provider_message_id(result)
         if provider_message_id and inserted_message_id:
             db.execute(text("""
                 UPDATE messages
                 SET zapi_message_id = :provider_message_id,
-                    delivery_status = 'sent',
-                    delivery_ack = 1,
+                    delivery_status = 'sending',
+                    delivery_ack = NULL,
                     delivery_status_updated_at = NOW()
                 WHERE id = :id
             """), {
@@ -972,9 +1051,9 @@ def send_image(
                 db=db,
                 company_id=company_id,
                 provider_message_id=provider_message_id,
-                status="sent",
-                ack=1,
-                ack_name="SERVER",
+                status="sending",
+                ack=None,
+                ack_name="PENDING",
                 local_message_id=body.localMessageId,
                 publish=True,
             )
@@ -1017,6 +1096,7 @@ def send_audio(
     Envia áudio (URL/base64) usando WAHA.
     """
     _require_whatsapp_scope(user, client_id, company_id, db)
+    canonical_phone = _normalize_contact_phone_for_storage(db, company_id, body.phone)
     import base64
 
     # Extrair bytes do áudio (base64 ou URL)
@@ -1066,7 +1146,7 @@ def send_audio(
         """), {
             "client_id": client_id,
             "company_id": company_id,
-            "contact_phone": body.phone,
+            "contact_phone": canonical_phone,
             "content": body.audio  # Salvar o áudio original
         }).fetchone()
         inserted_message_id = inserted.id if inserted else None
@@ -1081,19 +1161,19 @@ def send_audio(
     try:
         result = send_audio(
             company_id=company_id,
-            phone=body.phone,
+            phone=canonical_phone,
             audio_bytes=audio_bytes,
             audio_path=audio_path,
             db=None  # Não salvar novamente
         )
 
-        provider_message_id = result.get("id") or result.get("messageId")
+        provider_message_id = _extract_provider_message_id(result)
         if provider_message_id and inserted_message_id:
             db.execute(text("""
                 UPDATE messages
                 SET zapi_message_id = :provider_message_id,
-                    delivery_status = 'sent',
-                    delivery_ack = 1,
+                    delivery_status = 'sending',
+                    delivery_ack = NULL,
                     delivery_status_updated_at = NOW()
                 WHERE id = :id
             """), {
@@ -1105,9 +1185,9 @@ def send_audio(
                 db=db,
                 company_id=company_id,
                 provider_message_id=provider_message_id,
-                status="sent",
-                ack=1,
-                ack_name="SERVER",
+                status="sending",
+                ack=None,
+                ack_name="PENDING",
                 local_message_id=body.localMessageId,
                 publish=True,
             )
@@ -1244,6 +1324,7 @@ def send_video(
     Body: { phone, video, caption?, viewOnce?, delayMessage?, delayTyping?, asyncUpload? }
     """
     _require_whatsapp_scope(user, client_id, company_id, db)
+    canonical_phone = _normalize_contact_phone_for_storage(db, company_id, body.phone)
 
     logger.info(f"Recebido requisição para enviar vídeo. client_id={client_id}, company_id={company_id}")
 
@@ -1318,7 +1399,7 @@ def send_video(
         from backend.integrations.whatsapp_provider import send_video
         result = send_video(
             company_id=company_id,
-            phone=body.phone,
+            phone=canonical_phone,
             video_bytes=video_bytes,
             video_path=video_path,  # Caminho local para WAHA ou URL para outros
             db=db,

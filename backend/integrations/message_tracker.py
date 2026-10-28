@@ -7,6 +7,7 @@ Utiliza Redis com TTL para armazenar temporariamente mensagens enviadas
 import redis
 import json
 import logging
+import os
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import hashlib
@@ -20,7 +21,9 @@ class MessageTracker:
     """
 
     def __init__(self):
-        self.redis = redis.Redis(host='localhost', port=6379, db=1, decode_responses=True)
+        redis_url = os.getenv('MESSAGE_TRACKER_REDIS_URL') or os.getenv('REDIS_URL') or 'redis://redis:6379/0'
+        redis_db = int(os.getenv('MESSAGE_TRACKER_REDIS_DB', '1'))
+        self.redis = redis.Redis.from_url(redis_url, db=redis_db, decode_responses=True)
         self.TTL_SECONDS = 300  # 5 minutos
 
     def _generate_fingerprint(self, company_id: int, phone: str, message_type: str, content: Any) -> str:

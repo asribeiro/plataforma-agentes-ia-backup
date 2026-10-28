@@ -1,0 +1,6 @@
+{$PUBLIC_DOMAIN} {
+    encode zstd gzip
+    reverse_proxy web:80
+    tls {$ACME_EMAIL}
+}
+

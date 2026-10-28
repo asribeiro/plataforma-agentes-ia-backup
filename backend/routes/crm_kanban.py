@@ -14,6 +14,41 @@ from backend.services.pipeline_service import PipelineService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _ensure_company_has_minimal_pipeline(company_id: int, db: Session, user_id: Optional[int] = None):
+    """Garante que a empresa tenha ao menos um pipeline com etapas padrão."""
+    from backend.models import Pipeline
+
+    pipeline = db.query(Pipeline).filter(
+        Pipeline.company_id == company_id,
+        Pipeline.is_active == True
+    ).order_by(Pipeline.id.asc()).first()
+
+    if not pipeline:
+        pipeline = db.query(Pipeline).filter(
+            Pipeline.company_id == company_id
+        ).order_by(Pipeline.id.asc()).first()
+
+    if pipeline:
+        created_stages = PipelineService.ensure_standard_stages_for_pipeline(pipeline.id, db)
+        if created_stages:
+            logger.warning(
+                "CRM pipeline repaired: company_id=%s pipeline_id=%s created_stages=%s",
+                company_id,
+                pipeline.id,
+                created_stages,
+            )
+        return pipeline
+
+    created_pipeline = PipelineService.create_minimal_pipeline_for_company(company_id, db, user_id)
+    logger.info(
+        "CRM pipeline bootstrap: company_id=%s pipeline_id=%s user_id=%s",
+        company_id,
+        created_pipeline.id,
+        user_id,
+    )
+    return created_pipeline
+
 # --- Função para verificar API Key ---
 async def verify_api_key(
     api_key: str = Header(..., alias="X-API-Key"),
@@ -154,6 +189,13 @@ async def get_pipelines(
         Pipeline.company_id == company_id
     ).all()
 
+    if not pipelines:
+        creator_user_id = getattr(current_user, "id", None)
+        _ensure_company_has_minimal_pipeline(int(company_id), db, creator_user_id)
+        pipelines = db.query(Pipeline).filter(
+            Pipeline.company_id == company_id
+        ).all()
+
     result = []
     for pipeline in pipelines:
         stages_data = []
@@ -209,6 +251,13 @@ async def get_pipelines_api_key(
     pipelines = db.query(Pipeline).filter(
         Pipeline.company_id == company_id
     ).all()
+
+    if not pipelines:
+        creator_user_id = getattr(current_client, "id", None)
+        _ensure_company_has_minimal_pipeline(int(company_id), db, creator_user_id)
+        pipelines = db.query(Pipeline).filter(
+            Pipeline.company_id == company_id
+        ).all()
 
     result = []
     for pipeline in pipelines:
@@ -441,6 +490,58 @@ async def add_stage_to_pipeline(
             detail=f"Erro ao criar etapa: {str(e)}"
         )
 
+
+@router.post("/clients/{client_id}/companies/{company_id}/pipelines/{pipeline_id}/stages", response_model=PipelineStageResponse)
+async def add_stage_to_pipeline_legacy(
+    client_id: int,
+    company_id: int,
+    pipeline_id: int,
+    stage_data: PipelineStageCreate,
+    db: Session = Depends(get_db),
+    current_client: Union[User, Client] = Depends(verify_client_or_bearer_api_key)
+):
+    """Adicionar nova etapa a um pipeline existente (rota legada compatível com API key)."""
+
+    _ = client_id
+    _ = current_client
+    from backend.models import Pipeline
+
+    pipeline = db.query(Pipeline).filter(
+        Pipeline.id == pipeline_id
+    ).first()
+
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Pipeline não encontrado")
+
+    if int(company_id) != int(pipeline.company_id):
+        raise HTTPException(status_code=403, detail="Sem permissão para este pipeline")
+
+    try:
+        stage = PipelineService.create_custom_stage(pipeline_id, stage_data.dict(), db)
+
+        return PipelineStageResponse(
+            id=stage.id,
+            pipeline_id=stage.pipeline_id,
+            name=stage.name,
+            description=stage.description,
+            color=stage.color,
+            order=stage.order,
+            is_first_stage=stage.is_first_stage,
+            is_converted_stage=stage.is_converted_stage,
+            is_lost_stage=stage.is_lost_stage,
+            auto_advance_days=stage.auto_advance_days,
+            follow_up_sequence_id=stage.follow_up_sequence_id,
+            percentage_base_stage_id=stage.percentage_base_stage_id
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao criar etapa: {str(e)}"
+        )
+
 @router.put("/pipelines/stages/{stage_id}", response_model=PipelineStageResponse)
 async def update_pipeline_stage(
     stage_id: int,
@@ -564,6 +665,42 @@ async def reorder_pipeline_stages(
             detail="Erro ao atualizar ordem das etapas"
         )
 
+
+@router.put("/clients/{client_id}/companies/{company_id}/pipelines/{pipeline_id}/stages/reorder")
+async def reorder_pipeline_stages_legacy(
+    client_id: int,
+    company_id: int,
+    pipeline_id: int,
+    stage_orders: List[StageOrder],
+    db: Session = Depends(get_db),
+    current_client: Union[User, Client] = Depends(verify_client_or_bearer_api_key)
+):
+    """Reordenar etapas de um pipeline (rota legada compatível com API key)."""
+
+    _ = client_id
+    _ = current_client
+    from backend.models import Pipeline
+
+    pipeline = db.query(Pipeline).filter(Pipeline.id == pipeline_id).first()
+    if not pipeline:
+        raise HTTPException(status_code=404, detail="Pipeline não encontrado")
+
+    if int(company_id) != int(pipeline.company_id):
+        raise HTTPException(status_code=403, detail="Sem permissão para este pipeline")
+
+    success = PipelineService.update_stage_order(
+        [so.dict() for so in stage_orders],
+        db
+    )
+
+    if success:
+        return {"message": "Ordem das etapas atualizada com sucesso"}
+    else:
+        raise HTTPException(
+            status_code=500,
+            detail="Erro ao atualizar ordem das etapas"
+        )
+
 # --- Kanban Data Endpoints ---
 
 @router.get("/pipelines/kanban/{company_id}")
@@ -578,6 +715,8 @@ async def get_pipeline_kanban_data(
     # Validar permissão
     if current_user.company_id != company_id:
         raise HTTPException(status_code=403, detail="Sem permissão para esta empresa")
+
+    _ensure_company_has_minimal_pipeline(int(company_id), db, getattr(current_user, "id", None))
 
     kanban_data = PipelineService.get_pipeline_kanban_data(
         company_id=company_id,

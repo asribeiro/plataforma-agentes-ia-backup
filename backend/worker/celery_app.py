@@ -226,24 +226,9 @@ app.conf.beat_schedule = {
         }
     },
 
-    # NOVO: Agents SDK Database tasks
-    'refresh-all-companies-slots-database-every-5min': {
-        'task': 'agents_sdk.refresh_all_companies_slots',
-        'schedule': 300,  # 300 segundos = 5 minutos
-        'options': {
-            'queue': 'agents_sdk_queue',
-            'priority': 7,
-        }
-    },
-
-    'cleanup-expired-slots-every-hour': {
-        'task': 'agents_sdk.cleanup_expired_slots',
-        'schedule': 3600,  # 3600 segundos = 1 hora
-        'options': {
-            'queue': 'agents_sdk_queue',
-            'priority': 3,
-        }
-    },
+    # Agents SDK Database tasks temporariamente desabilitadas.
+    # Motivo: as tasks não estão importadas no worker (include comentado),
+    # o que gera "Received unregistered task" no processamento.
 }
 
 # Importar tasks para registrá-las no Celery

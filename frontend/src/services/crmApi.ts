@@ -87,6 +87,16 @@ export interface PipelineStage {
   updated_at?: string;
 }
 
+export interface PipelineKanbanData {
+  pipeline: {
+    id: number;
+    name?: string;
+    description?: string;
+    is_active?: boolean;
+  };
+  stages: PipelineStage[];
+}
+
 export interface Column {
   id: string;
   title: string;
@@ -223,7 +233,7 @@ export const crmApi = {
       }
 
       const response = await api.put(
-        `/api/agenda/clients/${clientId}/companies/${companyId}/leads/${leadId}`,
+        `/api/agenda/clients/${clientId}/companies/${companyId}/leads/${leadId}/with-custom-fields`,
         { custom_values: customValues }
       );
       return response.data;
@@ -348,13 +358,19 @@ export const pipelineApi = {
     try {
       const { clientId, companyId } = getAuthIds();
 
-      if (!clientId || !companyId) {
-        throw new Error('Informações de autenticação não encontradas para pipelines');
+      // Tenta rota legada (API key/client+company) e faz fallback automático
+      // para rota JWT quando os IDs locais estiverem ausentes, desatualizados
+      // ou sem permissão para a sessão autenticada atual.
+      if (clientId && companyId) {
+        try {
+          const response = await api.get(`/api/clients/${clientId}/companies/${companyId}/pipelines`);
+          return response.data;
+        } catch (legacyError) {
+          console.warn('Falha na rota legada de pipelines, tentando rota JWT:', legacyError);
+        }
       }
 
-      const response = await api.get(
-        `/api/clients/${clientId}/companies/${companyId}/pipelines`
-      );
+      const response = await api.get('/api/pipelines');
       return response.data;
     } catch (error) {
       console.error('Erro ao buscar pipelines:', error);
@@ -375,13 +391,35 @@ export const pipelineApi = {
     }
   },
 
+  async getKanbanData(companyId: number, pipelineId?: number): Promise<PipelineKanbanData> {
+    try {
+      const query = pipelineId ? `?pipeline_id=${pipelineId}` : '';
+      const response = await api.get(`/api/pipelines/kanban/${companyId}${query}`);
+      return response.data;
+    } catch (error) {
+      console.error('Erro ao buscar dados kanban do pipeline:', error);
+      throw error;
+    }
+  },
+
   // Criar novo estágio
   async createStage(pipelineId: number, stageData: Partial<PipelineStage>): Promise<PipelineStage> {
     try {
-      const response = await api.post(
-        `/api/pipelines/${pipelineId}/stages`,
-        stageData
-      );
+      const { clientId, companyId } = getAuthIds();
+
+      if (clientId && companyId) {
+        try {
+          const legacyResponse = await api.post(
+            `/api/clients/${clientId}/companies/${companyId}/pipelines/${pipelineId}/stages`,
+            stageData,
+          );
+          return legacyResponse.data;
+        } catch (legacyError) {
+          console.warn('Falha ao criar estágio pela rota legada, tentando rota JWT:', legacyError);
+        }
+      }
+
+      const response = await api.post(`/api/pipelines/${pipelineId}/stages`, stageData);
       return response.data;
     } catch (error) {
       console.error('Erro ao criar estágio:', error);
@@ -420,10 +458,19 @@ export const pipelineApi = {
     try {
       const { clientId, companyId } = getAuthIds();
 
-      await api.put(
-        `/api/pipelines/${pipelineId}/stages/reorder`,
-        stageOrders
-      );
+      if (clientId && companyId) {
+        try {
+          await api.put(
+            `/api/clients/${clientId}/companies/${companyId}/pipelines/${pipelineId}/stages/reorder`,
+            stageOrders,
+          );
+          return;
+        } catch (legacyError) {
+          console.warn('Falha no reorder pela rota legada, tentando rota JWT:', legacyError);
+        }
+      }
+
+      await api.put(`/api/pipelines/${pipelineId}/stages/reorder`, stageOrders);
     } catch (error) {
       console.error('Erro ao reordenar estágios:', error);
       throw error;

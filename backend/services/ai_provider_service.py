@@ -293,16 +293,6 @@ def validate_openai_api_key(
             if _model_id(model)
         }
         supported_models = _filter_supported_models(model_items)
-        if (
-            REQUIRED_OPENAI_RUNTIME_MODEL in supported_models
-            and REQUIRED_OPENAI_TRANSCRIPTION_MODEL in available_model_ids
-        ):
-            client.responses.create(
-                model=REQUIRED_OPENAI_RUNTIME_MODEL,
-                input="Responda apenas OK.",
-                max_output_tokens=1,
-                store=False,
-            )
     except Exception as exc:
         raise _validation_error_from_exception(exc) from None
     finally:
