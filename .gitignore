@@ -121,3 +121,4 @@ personal-os/
 tmp-share/
 .env.backend
 .env.docker
+tools/backup-github.sh
