@@ -200,8 +200,10 @@ async def get_nps_responses(
                 COUNT(*) as total,
                 COUNT(CASE WHEN score IS NOT NULL THEN 1 END) as answered,
                 AVG(CASE WHEN score IS NOT NULL THEN score END) as avg_score,
-                COUNT(CASE WHEN score >= 9 THEN 1 END) as promoters,
-                COUNT(CASE WHEN score <= 6 THEN 1 END) as detractors
+                -- Escala real da enquete e 1-5 (ver a pergunta em /send e /bulk-send).
+                -- Regua 1-5: promotor 4-5, neutro 3, detrator 1-2.
+                COUNT(CASE WHEN score >= 4 THEN 1 END) as promoters,
+                COUNT(CASE WHEN score <= 2 THEN 1 END) as detractors
             FROM nps_responses
             WHERE company_id = :company_id
             AND sent_at >= :date_from
