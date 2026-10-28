@@ -670,6 +670,16 @@ class Agendamento(Base):
 
     __table_args__ = (
         UniqueConstraint('client_id', 'lead_id', 'consulta_data', name='agendamento_lead_client_uniq'),
+        # Agenda unica por profissional (migration 0008). Indice parcial: horario
+        # cancelado volta a ficar livre, e agenda nula nao colide.
+        Index(
+            'uq_agendamento_agenda_slot',
+            'company_id',
+            'agenda_id',
+            'consulta_data',
+            unique=True,
+            postgresql_where=text("status NOT LIKE 'CANCELLED%' AND agenda_id IS NOT NULL"),
+        ),
     )
 
     client = relationship("Client", foreign_keys=[client_id])

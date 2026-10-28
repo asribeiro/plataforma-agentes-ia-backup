@@ -91,6 +91,88 @@ def recusar_autogenerate_destrutivo(context, revision, directives):
         )
 
 
+# ---------------------------------------------------------------------------
+# Item 2 do Public Release Gate: objetos legados fora do autogenerate.
+#
+# Estas tabelas e colunas existem no banco e SAO USADAS pelo sistema (webhook_audit
+# tem registros reais; follow_up e pos_venda rodam em producao), mas nao estao
+# declaradas no ORM. Sem esta lista, o `alembic check` da CI enxerga tudo como
+# "removido" e falha, e o autogenerate proporia apagar dados em uso.
+#
+# Declarar aqui e deliberado: o autogenerate ignora esses objetos, e a decisao
+# fica registrada no codigo em vez de a verificacao ser desligada.
+#
+# Para migrar de verdade no futuro: criar os models correspondentes, rodar
+# `alembic check` para confirmar, e entao remover o nome desta lista.
+# ---------------------------------------------------------------------------
+TABELAS_FORA_DO_AUTOGENERATE = {
+    "webhook_audit",
+    "confirmation_executions",
+    "follow_up_executions",
+    "noshow_follow_up_executions",
+    "pos_venda_steps",
+    "pos_venda_messages",
+    "pos_venda_sequences",
+    "pos_venda_executions",
+    "pos_venda_schedule_configs",
+}
+
+COLUNAS_FORA_DO_AUTOGENERATE = {
+    # integracao WPPConnect descontinuada; colunas ficaram no banco
+    ("companies", "wppconnect_base_url"),
+    ("companies", "wppconnect_session_name"),
+    ("companies", "wppconnect_secret_key"),
+    # arquivamento de contatos: gerenciado por SQL direto
+    ("contacts", "archived"),
+    ("contacts", "archived_at"),
+    ("contacts", "archived_by"),
+    ("contacts", "archive_reason"),
+    ("contacts", "unread_count"),
+    ("contacts", "last_message_at"),
+    ("contacts", "sender_lid"),
+    ("contacts", "source_id"),
+    ("contacts", "thumbnail_url"),
+}
+
+INDICES_FORA_DO_AUTOGENERATE = {
+    "idx_webhook_audit_company_message_type",
+    "idx_webhook_audit_created_at",
+    "idx_webhook_audit_status_created_at",
+    "idx_confirmation_exec_agendamento",
+    "idx_confirmation_exec_due",
+    "idx_noshow_follow_up_exec_due",
+    "idx_noshow_follow_up_exec_lead",
+    "idx_follow_up_exec_due",
+    "idx_follow_up_exec_lead",
+    "idx_pos_venda_messages_step",
+    "idx_pos_venda_exec_due",
+    "idx_pos_venda_exec_venda",
+    "idx_pos_venda_steps_sequence",
+    "idx_pos_venda_sequences_company_unique",
+    "idx_contacts_archived",
+}
+
+
+def incluir_objeto(object, name, type_, reflected, compare_to):
+    """Chamado pelo alembic para decidir se um objeto entra na comparacao."""
+    if type_ == "table":
+        return name not in TABELAS_FORA_DO_AUTOGENERATE
+
+    if type_ == "column":
+        tabela = getattr(getattr(object, "table", None), "name", None)
+        if tabela in TABELAS_FORA_DO_AUTOGENERATE:
+            return False
+        return (tabela, name) not in COLUNAS_FORA_DO_AUTOGENERATE
+
+    if type_ == "index":
+        tabela = getattr(getattr(object, "table", None), "name", None)
+        if tabela in TABELAS_FORA_DO_AUTOGENERATE:
+            return False
+        return name not in INDICES_FORA_DO_AUTOGENERATE
+
+    return True
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
 
@@ -105,6 +187,7 @@ def run_migrations_offline() -> None:
     """
     url = get_url()
     context.configure(
+        include_object=incluir_objeto,
         process_revision_directives=recusar_autogenerate_destrutivo,
         url=url,
         target_metadata=target_metadata,
@@ -142,6 +225,7 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
+        include_object=incluir_objeto,
         process_revision_directives=recusar_autogenerate_destrutivo,
             connection=connection,
             target_metadata=target_metadata,
