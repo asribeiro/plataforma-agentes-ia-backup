@@ -149,12 +149,22 @@ def _email_em_uso(email: str, company_id: int, db: Session, ignorar_id: int = 0)
     return db.query(q.exists()).scalar()
 
 
-def _verificar_limite_de_profissionais(company_id: int, db: Session) -> None:
-    """Bloqueia o cadastro quando a clínica já atingiu o limite da modalidade.
+def _verificar_limite_de_profissionais(
+    company_id: int, db: Session, reativando: bool = False
+) -> None:
+    """Bloqueia quando a clínica já atingiu o limite da modalidade.
 
-    A mensagem precisa dizer o que fazer, não apenas negar: quem tenta cadastrar
-    o profissional excedente é justamente quem pede a mudança de modalidade —
-    e quem muda a modalidade é o admin da plataforma, não o cliente.
+    Vale para CADASTRO e para REATIVAÇÃO. Reativar não checava nada: uma clínica
+    no limite de 4 desativava um profissional, reativava um quinto e passava — a
+    modalidade é regra comercial, não preferência de tela, e vazava pela porta
+    dos fundos.
+
+    A contagem é sempre de ATIVOS e o profissional sendo reativado ainda está
+    inativo neste instante, então ele não se conta duas vezes.
+
+    A mensagem precisa dizer o que fazer, não apenas negar: quem tenta o
+    excedente é justamente quem pede a mudança de modalidade — e quem muda a
+    modalidade é o admin da plataforma, não o cliente.
     """
     limite = _limite_de_profissionais(company_id, db)
     existentes = (
@@ -170,7 +180,12 @@ def _verificar_limite_de_profissionais(company_id: int, db: Session) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 "Esta clínica está na modalidade monoprofissional (1 profissional). "
-                "A modalidade é definida pelo administrador da plataforma — peça a "
+                + (
+                    "Para reativar este profissional, desative o que está ativo antes. "
+                    if reativando
+                    else ""
+                )
+                + "A modalidade é definida pelo administrador da plataforma — peça a "
                 "mudança para 'clínica pequena' (até 4) ou 'clínica média' (até 10). "
                 "Nenhum cadastro existente é apagado por isso."
             ),
@@ -179,9 +194,14 @@ def _verificar_limite_de_profissionais(company_id: int, db: Session) -> None:
         status_code=status.HTTP_409_CONFLICT,
         detail=(
             f"Limite da modalidade atingido: {existentes} de {limite} profissionais "
-            f"ativos. Para cadastrar mais, peça ao administrador da plataforma a "
-            f"mudança de modalidade. Desativar um profissional que saiu também "
-            f"libera a vaga."
+            f"ativos. "
+            + (
+                "Para reativar este profissional, desative outro antes ou peça ao "
+                if reativando
+                else "Para cadastrar mais, peça ao "
+            )
+            + "administrador da plataforma a mudança de modalidade. "
+            "Desativar um profissional que saiu também libera a vaga."
         ),
     )
 
@@ -261,6 +281,12 @@ def atualizar(
 
     if dados.name is not None:
         obj.name = dados.name.strip()
+
+    # Reativar consome vaga da modalidade: o POST checava o limite, o PUT não —
+    # dava para passar do contratado desativando um e reativando outro.
+    reativando = dados.active is True and not obj.active
+    if reativando:
+        _verificar_limite_de_profissionais(company_id, db, reativando=True)
 
     # telefone e CRO sao anulaveis: null explicito APAGA (corrigir cadastro
     # errado), campo ausente PRESERVA. `active` nao aceita null.
