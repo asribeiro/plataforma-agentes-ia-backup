@@ -108,6 +108,19 @@ export const SIDEBAR_MODULE_MENUS: Record<ModuleKey, MenuItem[]> = {
     },
     { path: '/chat', label: 'Chat Ao Vivo', icon: MessageSquare, permission: 'chat' },
     { path: '/calendar-config', label: 'Agenda', icon: Calendar, permission: 'company' },
+    // Cadastro da clinica (F1-09). Sem item de menu as telas existiriam e
+    // ninguem chegaria nelas — so por URL direta. Mesma permissao de Agenda
+    // ('company'), que o usuario da clinica ja tem: nao amplia acesso.
+    {
+      path: '/procedimentos',
+      label: 'Procedimentos',
+      icon: ClipboardCheck,
+      permission: 'company',
+      subItems: [
+        { path: '/procedimentos', label: 'Catálogo', permission: 'company' },
+        { path: '/profissionais', label: 'Profissionais', icon: UserRound, permission: 'company' },
+      ],
+    },
   ],
   clientes: [
     {
