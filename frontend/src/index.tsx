@@ -6,6 +6,8 @@ import './index.css';
 import App from './App.tsx';
 import reportWebVitals from './reportWebVitals.ts';
 import { applyBrandingToDocument } from './config/branding.ts';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 console.log('index.tsx: starting execution');
 applyBrandingToDocument();
@@ -45,6 +47,21 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />
+      {/* Sem este container todo `toast.sucesso()`/`toast.erro()` do app e
+          no-op silencioso: a chamada nao lanca erro, so nao aparece nada na
+          tela. Ele fica FORA do ErrorBoundary do App? Nao: aqui dentro, ao lado
+          dele, para sobreviver ao boundary e continuar visivel quando a tela
+          quebrada for substituida pela mensagem de erro. */}
+      <ToastContainer
+        position="top-right"
+        autoClose={5000}
+        newestOnTop
+        closeOnClick
+        pauseOnHover
+        pauseOnFocusLoss={false}
+        limit={4}
+        theme="light"
+      />
     </ErrorBoundary>
   </React.StrictMode>
 );
