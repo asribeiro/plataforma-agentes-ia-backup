@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from backend.auth import get_current_user
 from backend.db import get_db
 from backend.models import Company, Professional, ProfessionalService, Service
+from backend.utils.patch_utils import aplicar_patch
 
 logger = logging.getLogger("saas_business.professionals")
 
@@ -261,10 +262,9 @@ def atualizar(
     if dados.name is not None:
         obj.name = dados.name.strip()
 
-    for campo in ("phone", "cro", "active"):
-        valor = getattr(dados, campo)
-        if valor is not None:
-            setattr(obj, campo, valor)
+    # telefone e CRO sao anulaveis: null explicito APAGA (corrigir cadastro
+    # errado), campo ausente PRESERVA. `active` nao aceita null.
+    aplicar_patch(obj, dados, ("phone", "cro", "active"), anulaveis=("phone", "cro"))
 
     db.commit()
     db.refresh(obj)

@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from backend.auth import get_current_user
 from backend.db import get_db
 from backend.models import Client, ProfessionalService, Service, User
+from backend.utils.patch_utils import aplicar_patch
 
 logger = logging.getLogger("saas_business.services")
 
@@ -206,10 +207,16 @@ def atualizar(
             )
         obj.name = dados.name.strip()
 
-    for campo in ("duration_minutes", "price_cents", "is_evaluation", "active"):
-        valor = getattr(dados, campo)
-        if valor is not None:
-            setattr(obj, campo, valor)
+    # `price_cents: null` LIMPA o preco (procedimento sem preco = o agente nao
+    # cita valor). Antes o null era ignorado e o preco antigo ficava: a tela
+    # dizia "removido" e o agente seguia falando o valor. Os demais campos sao
+    # NOT NULL no banco, entao null neles continua ignorado de proposito.
+    aplicar_patch(
+        obj,
+        dados,
+        ("duration_minutes", "price_cents", "is_evaluation", "active"),
+        anulaveis=("price_cents",),
+    )
 
     db.commit()
     db.refresh(obj)
