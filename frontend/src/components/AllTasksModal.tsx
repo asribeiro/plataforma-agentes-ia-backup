@@ -242,7 +242,11 @@ const AllTasksModal: React.FC<AllTasksModalProps> = ({ isOpen, onClose, onTaskCl
   };
 
   // Apenas ordenar tarefas (filtros já aplicados no backend)
-  const filteredAndSortedTasks = [...tasks].sort((a, b) => {
+  // A API de /api/tasks/all pode devolver entradas vazias no array. Sem o
+  // filtro, o .map() recebe undefined e o componente estoura ao ler
+  // task.title — derrubando o app inteiro pelo ErrorBoundary, em
+  // qualquer tela autenticada, logo apos as notificacoes carregarem.
+  const filteredAndSortedTasks = [...tasks].filter(Boolean).sort((a, b) => {
     if (sortBy === 'date') {
       const dateA = new Date(a.scheduled_for).getTime();
       const dateB = new Date(b.scheduled_for).getTime();
