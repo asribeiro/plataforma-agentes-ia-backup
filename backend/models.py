@@ -67,6 +67,14 @@ class Company(Base):
     # clients = relationship("Client", back_populates="company")
     business_type = relationship("BusinessType", back_populates="companies")
     agent_configurations = relationship("AgentConfiguration", back_populates="company")
+    # Flag de negocio: a clinica atende com mais de um profissional?
+    # FALSE (padrao) = monoprofissional: o agente nao oferece escolha de
+    # profissional e usa a agenda do unico. TRUE = oferece os profissionais
+    # habilitados ao procedimento e consulta a agenda do escolhido.
+    multi_professional_enabled = Column(
+        Boolean, nullable=False, server_default=text("false"), default=False
+    )
+
     agent_workforces = relationship("AgentWorkforce", back_populates="company", cascade="all, delete-orphan")
     calendar_integrations = relationship("CalendarIntegration", back_populates="company")
     support_group_integrations = relationship("SupportGroupIntegration", back_populates="company")
