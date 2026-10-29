@@ -393,6 +393,13 @@ app.include_router(noshow_followup_schedule_router, prefix="/api", tags=["no-sho
 app.include_router(metrics_funnels_router, prefix="/api", tags=["metrics"])
 app.include_router(atendimento_router, prefix="/api")
 app.include_router(users_router, prefix="/api", tags=["users"])
+# Usuarios e auditoria da clinica (F1-12, F1-13). Router proprio porque o
+# /api/users existente e escopo de master (Client dono de varias empresas);
+# misturar os dois escopos e como se cria vazamento entre clinicas.
+from backend.routes import clinic_users_routes, clinic_audit_routes  # noqa: E402
+
+app.include_router(clinic_users_routes.router)
+app.include_router(clinic_audit_routes.router)
 app.include_router(teams_router, prefix="/api", tags=["teams"])
 app.include_router(business_types_router, tags=["Business Types"])
 app.include_router(no_show_router, prefix="/api/agenda")
