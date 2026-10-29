@@ -7,6 +7,7 @@ import Login from './pages/Login.tsx';
 import ResetPassword from './pages/ResetPassword.tsx';
 import NewCompanyAdminPage from './pages/CreateNewCompanyPage.tsx';
 import PrivateRoute from './components/PrivateRoute.tsx';
+import Procedimentos from './pages/Procedimentos.tsx';
 import ProtectedLayout from './components/ProtectedLayout.tsx';
 import Dashboard from './pages/Dashboard.tsx';
 import ChatPage4 from './pages/Chat.tsx';
@@ -66,6 +67,7 @@ const App: React.FC = () => {
                 <Route element={<ProtectedLayout />}>
                   {/* Dashboard principal */}
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/procedimentos" element={<Procedimentos />} />
                   <Route path="/dashboard/ads" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/dashboard/metrics" element={<Navigate to="/dashboard" replace />} />
 
