@@ -240,3 +240,32 @@ def test_usuario_de_outra_clinica_nao_e_editavel(db, cenario, app):
         f"/api/clinic/users/{estranho.id}", json={"name": "Tentativa"}
     )
     assert resposta.status_code == 404
+
+
+# ---------------------------------------------------- quem sou eu (para a tela)
+
+def test_eu_diz_o_papel_e_o_que_ele_permite_ao_admin(db, cenario, app):
+    resposta = _cliente(app, cenario["admin"]).get("/api/clinic/users/eu")
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["role"] == "clinic_admin"
+    assert corpo["pode_administrar_usuarios"] is True
+    assert corpo["ve_prontuario"] is True
+    assert "prontuário" in corpo["role_rotulo"].lower()
+
+
+def test_eu_do_atendimento_avisa_que_nao_administra_nem_ve_prontuario(db, cenario, app):
+    resposta = _cliente(app, cenario["atendente"]).get("/api/clinic/users/eu")
+    assert resposta.status_code == 200, resposta.text
+    corpo = resposta.json()
+    assert corpo["role"] == "service_professional"
+    assert corpo["pode_administrar_usuarios"] is False
+    assert corpo["ve_prontuario"] is False
+    assert corpo["professional_id"] == cenario["ativa"].id
+    assert corpo["professional_nome"] == "Dra. Ana"
+
+
+def test_eu_esta_disponivel_para_qualquer_papel_logado(db, cenario, app):
+    """Ninguem toma 403 no /eu: e a tela pedindo o proprio retrato."""
+    for usuario in (cenario["admin"], cenario["atendente"]):
+        assert _cliente(app, usuario).get("/api/clinic/users/eu").status_code == 200

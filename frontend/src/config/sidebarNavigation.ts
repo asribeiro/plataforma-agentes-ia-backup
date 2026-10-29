@@ -13,6 +13,7 @@ import {
   Plug,
   Receipt,
   Share2,
+  UserCog,
   Users,
   UserRound,
   Webhook,
@@ -119,6 +120,17 @@ export const SIDEBAR_MODULE_MENUS: Record<ModuleKey, MenuItem[]> = {
       subItems: [
         { path: '/procedimentos', label: 'Catálogo', permission: 'company' },
         { path: '/profissionais', label: 'Profissionais', icon: UserRound, permission: 'company' },
+        // Equipe: nao aparece para quem nao administra usuarios da clinica.
+        // `requiresClinicalAdmin` e resolvido em filterMenusByPermissions com a
+        // flag que usePapelClinico grava (GET /api/clinic/users/eu) — o modelo
+        // de permissoes de equipe nao conhece papel clinico.
+        {
+          path: '/equipe',
+          label: 'Equipe',
+          icon: UserCog,
+          permission: 'company',
+          requiresClinicalAdmin: true,
+        },
       ],
     },
   ],

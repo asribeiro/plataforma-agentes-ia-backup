@@ -25,12 +25,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from backend.auth import hash_password
+from backend.auth import get_current_user, hash_password
 from backend.db import get_db
 from backend.models import Company, Professional, User
 from backend.services.papel_clinico import (
     PAPEIS_COM_PROFISSIONAL_OBRIGATORIO,
     PAPEIS_QUE_ADMINISTRAM_USUARIOS,
+    PAPEIS_QUE_VEEM_PRONTUARIO,
     PAPEIS_VALIDOS,
     exigir_admin_de_usuarios,
 )
@@ -62,6 +63,18 @@ class ClinicaUsuarioOut(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class EuClinicaOut(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: str
+    role_rotulo: str
+    professional_id: Optional[int] = None
+    professional_nome: Optional[str] = None
+    pode_administrar_usuarios: bool
+    ve_prontuario: bool
 
 
 class ClinicaUsuarioIn(BaseModel):
@@ -219,6 +232,37 @@ def listar_papeis(usuario=Depends(exigir_admin_de_usuarios)):
         for papel in ("clinic_admin", "clinical_professional", "service_professional",
                       "admin", "manager", "staff")
     ]
+
+
+@router.get("/eu", response_model=EuClinicaOut)
+def quem_sou_eu(db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    """Papel do usuario logado, vinculo e o que o papel permite — para a TELA.
+
+    Existe porque os papeis clinicos sao invisiveis no frontend hoje: o menu usa
+    permissoes de equipe, nao papel clinico. Sem este endpoint a tela de Equipe
+    so descobriria que nao pode administrar depois de tomar um 403, mostrando
+    uma tela que nao funciona para quem entrou nela.
+    """
+    papel = (getattr(usuario, "role", None) or "").strip()
+    nome_prof = None
+    professional_id = getattr(usuario, "professional_id", None)
+    if professional_id:
+        nome_prof = (
+            db.query(Professional.name)
+            .filter(Professional.id == professional_id)
+            .scalar()
+        )
+    return EuClinicaOut(
+        id=getattr(usuario, "id", 0),
+        name=getattr(usuario, "name", "") or "",
+        email=getattr(usuario, "email", "") or "",
+        role=papel,
+        role_rotulo=ROTULOS_DE_PAPEL.get(papel, papel or "sem papel"),
+        professional_id=professional_id,
+        professional_nome=nome_prof,
+        pode_administrar_usuarios=papel in PAPEIS_QUE_ADMINISTRAM_USUARIOS,
+        ve_prontuario=papel in PAPEIS_QUE_VEEM_PRONTUARIO,
+    )
 
 
 @router.get("", response_model=List[ClinicaUsuarioOut])

@@ -38,6 +38,7 @@ import IntegrationsHub from './pages/IntegrationsHub.tsx';
 import TelegramIntegration from './pages/TelegramIntegration.tsx';
 import Procedimentos from './pages/Procedimentos.tsx';
 import Profissionais from './pages/Profissionais.tsx';
+import Equipe from './pages/Equipe.tsx';
 
 const AgendaIntegrationRedirect: React.FC = () => {
   const location = useLocation();
@@ -88,6 +89,9 @@ const App: React.FC = () => {
                   {/* Cadastro da clínica (F1-09) */}
                   <Route path="/procedimentos" element={<Procedimentos />} />
                   <Route path="/profissionais" element={<Profissionais />} />
+                  {/* Equipe da clinica: papel e vinculo (F1-12). Fica junto das
+                      telas de cadastro porque e o mesmo dono que usa. */}
+                  <Route path="/equipe" element={<Equipe />} />
 
                   {/* Configurações da Empresa */}
                   <Route path="/account/profile" element={<AccountProfile />} />

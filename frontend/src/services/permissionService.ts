@@ -24,6 +24,8 @@ export interface MenuItem {
   isNew?: boolean;
   isBeta?: boolean;
   isGroup?: boolean;
+  /** So aparece para quem administra usuarios da clinica (papel clinico). */
+  requiresClinicalAdmin?: boolean;
 }
 
 export interface SubItem {
@@ -34,6 +36,8 @@ export interface SubItem {
   isBeta?: boolean;
   permission?: Permission; // Nova propriedade para controle de acesso
   subItems?: SubItem[]; // Suporte a n-níveis (L3)
+  /** Idem: escondido de quem nao administra a equipe da clinica. */
+  requiresClinicalAdmin?: boolean;
 }
 
 export const USER_TYPE_PERMISSIONS: Record<UserType, Permission[]> = {
@@ -116,6 +120,22 @@ export const hasPermission = (permission: Permission): boolean => {
 /**
  * Filtra os itens de menu baseado nas permissões do usuário
  */
+/**
+ * O usuario logado administra a equipe da clinica?
+ *
+ * Lido de uma flag que `usePapelClinico` grava a partir de GET
+ * /api/clinic/users/eu. Enquanto a flag nao existe (primeiro carregamento), o
+ * item fica escondido: e melhor a tela aparecer um instante depois do que
+ * oferecer ao atendimento uma tela que responde 403.
+ */
+export const podeAdministrarEquipe = (): boolean => {
+  try {
+    return localStorage.getItem('clinic_pode_administrar_usuarios') === 'true';
+  } catch {
+    return false;
+  }
+};
+
 export const filterMenusByPermissions = (menuItems: MenuItem[]): MenuItem[] => {
   return menuItems.map(item => {
     const nextItem: MenuItem = {
@@ -130,6 +150,10 @@ export const filterMenusByPermissions = (menuItems: MenuItem[]): MenuItem[] => {
     return nextItem;
   }).filter(item => {
     if (item.permission && !hasPermission(item.permission)) {
+      return false;
+    }
+
+    if (item.requiresClinicalAdmin && !podeAdministrarEquipe()) {
       return false;
     }
 
