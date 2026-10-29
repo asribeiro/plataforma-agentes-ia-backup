@@ -492,6 +492,35 @@ class SchedulingData(BaseModel):
     professional: str = ""
     notes: str = ""
 
+
+class _SlotsPorProfissional:
+    """Encaminha ao SlotsService injetando o profissional que o paciente pediu.
+
+    Existe porque o tool `get_available_slots` ja recebia `professional` desde
+    sempre e nunca usava: o nome ia para o log e o horario oferecido era o da
+    primeira agenda ativa da empresa. Com mais de um profissional isso e
+    responder a agenda errada.
+
+    Envelopar (em vez de editar as ~16 chamadas) mantem a mudanca num lugar so:
+    qualquer `get_available_slots` / `get_available_slots_filtered` recebe o
+    `professional_id` se o chamador nao tiver passado um.
+    """
+
+    def __init__(self, base, professional_id: int):
+        self._base = base
+        self._professional_id = professional_id
+
+    def __getattr__(self, nome):
+        atributo = getattr(self._base, nome)
+        if nome.startswith("get_available_slots") and callable(atributo):
+            def com_profissional(*args, **kwargs):
+                kwargs.setdefault("professional_id", self._professional_id)
+                return atributo(*args, **kwargs)
+
+            return com_profissional
+        return atributo
+
+
 def create_scheduling_tools(slots_service, company_id: int, phone: str = "", agenda_id: int = None):
     """
     Create scheduling tools with proper context injection
@@ -557,6 +586,37 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
              current_phone = "unknown"
 
         logger.critical(f"[TOOL_ENTRY] get_available_slots called with: preferred_date='{preferred_date}', preferred_time='{preferred_time}', professional='{professional}'")
+
+        # De QUEM e o horario. O parametro `professional` existia e era ignorado:
+        # sem resolver para professional_id, o servico respondia pela primeira
+        # agenda ativa da empresa.
+        servico_slots = slots_service
+        if professional:
+            try:
+                from backend.agents_sdk.tools.clinical_tools import (
+                    resolver_profissional_por_nome,
+                )
+                from backend.db import get_db as _get_db_local
+
+                _db_res = next(_get_db_local())
+                try:
+                    _prof = resolver_profissional_por_nome(_db_res, company_id, professional)
+                finally:
+                    _db_res.close()
+                if _prof:
+                    servico_slots = _SlotsPorProfissional(slots_service, _prof.id)
+                    logger.critical(
+                        "[PROFISSIONAL] '%s' resolvido para id=%s (%s)",
+                        professional, _prof.id, _prof.name,
+                    )
+                else:
+                    logger.warning(
+                        "[PROFISSIONAL] '%s' nao encontrado na empresa %s: "
+                        "segue sem filtrar por profissional",
+                        professional, company_id,
+                    )
+            except Exception as exc:  # noqa: BLE001 - nunca derrubar a busca por isso
+                logger.warning("[PROFISSIONAL] falha ao resolver '%s': %s", professional, exc)
 
         # NEW: Enhanced tracing with structured context
         with trace("get_available_slots", disabled=True):
@@ -746,13 +806,13 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                 logger.info(f"[SearchParams] urgency={urgency} → days_ahead={days_ahead}, limit={search_limit}")
 
                 # Use DatabaseSchedulingService method for real data
-                if hasattr(slots_service, 'get_available_slots_from_database'):
+                if hasattr(servico_slots, 'get_available_slots_from_database'):
                     # DatabaseSchedulingService - use real data with filters
                     logger.critical(f"[DB_SERVICE_DEBUG] Calling get_available_slots_from_database with weekday_name='{weekday_name}', time_periods={time_periods}")
 
                     def _fetch_db_slots():
                          try:
-                             return slots_service.get_available_slots_from_database(
+                             return servico_slots.get_available_slots_from_database(
                                 limit=200,  # High limit to ensure we reach future weeks (slots are at position 159+)
                                 weekday_name=weekday_name,
                                 time_period=time_periods[0] if time_periods else None,
@@ -765,14 +825,14 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                     all_slots = await asyncio.to_thread(_fetch_db_slots)
 
                     # --- FALLBACK STRATEGY START ---
-                    if not all_slots and hasattr(slots_service, 'get_available_slots_from_database'):
+                    if not all_slots and hasattr(servico_slots, 'get_available_slots_from_database'):
                         logger.warning(f"[FallbackStrategy] Primary search returned 0 slots for {weekday_name} {time_periods}")
 
                         # Strategy 1: Relax Time Constraint (Same day, any time)
                         if weekday_name and time_periods:
                             logger.info(f"[FallbackStrategy] Attempting Strategy 1: Relax Time Constraint (keep {weekday_name}, ignore {time_periods})")
                             def _fetch_fallback_1():
-                                return slots_service.get_available_slots_from_database(
+                                return servico_slots.get_available_slots_from_database(
                                     limit=10,
                                     weekday_name=weekday_name,
                                     time_period=None, # Relaxed
@@ -791,7 +851,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                             logger.info(f"[FallbackStrategy] Attempting Strategy 2: Broad Search (Next 7 days)")
                             def _fetch_fallback_2():
                                 # Searching generally without weekday filter implies searching next available days
-                                return slots_service.get_available_slots_from_database(
+                                return servico_slots.get_available_slots_from_database(
                                     limit=10,
                                     weekday_name=None, # Relaxed
                                     time_period=None,  # Relaxed
@@ -814,7 +874,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                         logger.critical(f"[WEEKDAY_DEBUG] Searching for weekday_name='{weekday_name}' with limit={search_limit}")
 
                         def _fetch_filtered_weekday():
-                            return slots_service.get_available_slots_filtered(
+                            return servico_slots.get_available_slots_filtered(
                                 company_id=company_id,
                                 weekday_name=weekday_name,
                                 limit=search_limit,
@@ -831,7 +891,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
 
                         for period in time_periods:
                             def _fetch_period_slots(p=period):
-                                return slots_service.get_available_slots_filtered(
+                                return servico_slots.get_available_slots_filtered(
                                     company_id=company_id,
                                     weekday_name=weekday_name,
                                     time_period=p,
@@ -844,7 +904,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                     elif time_periods:
                         for period in time_periods:
                             def _fetch_period_only(p=period):
-                                return slots_service.get_available_slots_filtered(
+                                return servico_slots.get_available_slots_filtered(
                                     company_id=company_id,
                                     time_period=p,
                                     limit=search_limit,
@@ -861,7 +921,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
 
                     # 1. Decide on fallback method based on service capabilities
                     fallback_method = None
-                    is_legacy_service = not hasattr(slots_service, 'get_available_slots_from_database')
+                    is_legacy_service = not hasattr(servico_slots, 'get_available_slots_from_database')
 
                     # Strategy 1: Relax Time Constraint (Same day, any time)
                     if weekday_name and time_periods:
@@ -869,7 +929,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
 
                         def _fetch_fallback_1():
                             if is_legacy_service:
-                                return slots_service.get_available_slots_filtered(
+                                return servico_slots.get_available_slots_filtered(
                                     company_id=company_id,
                                     weekday_name=weekday_name,
                                     time_period=None, # Relaxed
@@ -877,7 +937,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                                     agenda_id=agenda_id
                                 )
                             else:
-                                return slots_service.get_available_slots_from_database(
+                                return servico_slots.get_available_slots_from_database(
                                     limit=10,
                                     weekday_name=weekday_name,
                                     time_period=None,
@@ -901,7 +961,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                         def _fetch_fallback_2():
                             if is_legacy_service:
                                 # Legacy service: "None" parameters usually trigger default/broad search or next available
-                                return slots_service.get_available_slots_filtered(
+                                return servico_slots.get_available_slots_filtered(
                                     company_id=company_id,
                                     weekday_name=None, # Relaxed
                                     time_period=None,  # Relaxed
@@ -909,7 +969,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                                     agenda_id=agenda_id
                                 )
                             else:
-                                return slots_service.get_available_slots_from_database(
+                                return servico_slots.get_available_slots_from_database(
                                     limit=10,
                                     weekday_name=None,
                                     time_period=None,
@@ -931,7 +991,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                         logger.critical(f"[FALLBACK_DEBUG] Using SlotsService fallback with days_ahead={days_ahead}, limit={search_limit}")
 
                         def _fetch_fallback_slots():
-                            return slots_service.get_available_slots(
+                            return servico_slots.get_available_slots(
                                 company_id=company_id,
                                 limit=search_limit,
                                 days_ahead=days_ahead,
@@ -1054,7 +1114,7 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                     # --- LAST RESORT FALLBACK ---
                     # Search broadly for the next 7 days
                     def _fetch_last_resort():
-                         return slots_service.get_available_slots_filtered(
+                         return servico_slots.get_available_slots_filtered(
                              company_id=company_id,
                              limit=50,  # Get ALL available slots (requested by user)
                              weekday_name=None,
@@ -1284,7 +1344,17 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
     # REMOVED schedule_appointment - use process_appointment_confirmation instead
     # Having two similar tools was confusing the AI model
 
-    return [get_available_slots]
+    # Tools do F1-04. Ficam no FIM da lista de proposito: manager.py usa
+    # scheduling_tools[0] como get_available_slots.
+    try:
+        from backend.agents_sdk.tools.clinical_tools import create_clinical_tools
+
+        tools_clinicas = create_clinical_tools(company_id)
+    except Exception as exc:  # noqa: BLE001 - o agendamento antigo nao pode parar
+        logger.warning("tools clinicas indisponiveis nesta execucao: %s", exc)
+        tools_clinicas = []
+
+    return [get_available_slots] + tools_clinicas
 
 def _get_day_info(date_str: str) -> str:
     """Get day of week info for date string"""
