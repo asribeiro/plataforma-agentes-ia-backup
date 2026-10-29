@@ -26,7 +26,7 @@ class AgendaBase(BaseModel):
     slot_duration: int = Field(..., gt=0)
     active: bool = True
     timezone: str = "America/Sao_Paulo"
-    safety_margin_minutes: int = Field(180, ge=0)
+    safety_margin_minutes: int = Field(30, ge=0)
     google_calendar_id: Optional[str] = None
     google_calendar_summary: Optional[str] = None
     google_calendar_time_zone: Optional[str] = None

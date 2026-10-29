@@ -598,7 +598,7 @@ class Agenda(Base):
     slot_duration = Column(Integer, default=30, nullable=False) # Duration in minutes
     active = Column(Boolean, default=True)
     timezone = Column(String(50), default="America/Sao_Paulo", nullable=False) # Nova coluna
-    safety_margin_minutes = Column(Integer, default=180, nullable=False) # Margem de segurança em minutos
+    safety_margin_minutes = Column(Integer, default=30, nullable=False) # Margem de segurança em minutos
     google_calendar_id = Column(String(255), nullable=True)
     google_calendar_summary = Column(String(255), nullable=True)
     google_calendar_time_zone = Column(String(80), nullable=True)
