@@ -15,7 +15,7 @@ const tabs: Array<{
     icon: React.ComponentType<{ className?: string }>;
 }> = [
     { id: 'calendar', label: 'Calendário', description: 'Dia e semana', icon: CalendarIcon },
-    { id: 'hours', label: 'Agendas e horários', description: 'Disponibilidade', icon: Clock },
+    { id: 'hours', label: 'Agendas por profissional', description: 'Turnos, duração e fuso', icon: Clock },
     { id: 'integrations', label: 'Integrações', description: 'Google e conectores', icon: Link2 },
 ];
 
@@ -58,7 +58,7 @@ const CalendarConfigPage: React.FC = () => {
                             </div>
                             <h1 className="text-2xl font-semibold sm:text-3xl">Agenda</h1>
                             <p className={`mt-1 max-w-2xl text-sm ${mutedClass}`}>
-                                Calendário, horários por agenda, fuso e integrações.
+                                Uma agenda ativa por profissional: turnos, duração da vaga, margem de segurança e fuso.
                             </p>
                         </div>
 
