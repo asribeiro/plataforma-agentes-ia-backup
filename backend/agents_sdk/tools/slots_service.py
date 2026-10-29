@@ -13,6 +13,49 @@ from ..database.models import CompanySlot
 
 logger = logging.getLogger(__name__)
 
+
+def resolver_agenda(
+    agendas: List[Any],
+    agenda_id: Optional[int] = None,
+    professional_id: Optional[int] = None,
+) -> tuple[Optional[Any], str]:
+    """Escolhe a agenda que responde pelo horario. Funcao PURA, testavel.
+
+    Devolve (agenda, motivo). Motivo vazio = resolvido.
+
+    A regra existe porque a agenda passou a ser POR PROFISSIONAL (decisao de
+    28/10). Antes, "a primeira agenda ativa da empresa" era uma resposta aceita
+    porque so existia uma. Com N profissionais ela passa a estar ERRADA: seria
+    responder o horario da Dra. Ana para quem perguntou pelo Dr. Bruno.
+
+    - agenda_id         -> aquela agenda, se estiver entre as candidatas
+    - professional_id   -> a agenda DAQUELE profissional (uma ativa por vinculo)
+    - nenhum dos dois   -> so resolve quando existe UMA unica agenda ativa;
+                           com duas ou mais, abstem ("ambiguo") em vez de
+                           escolher no chute.
+    """
+    if not agendas:
+        return None, "sem_agenda_ativa"
+
+    if agenda_id is not None:
+        for a in agendas:
+            if getattr(a, "id", None) == agenda_id:
+                return a, ""
+        return None, "agenda_inexistente"
+
+    if professional_id is not None:
+        do_profissional = [
+            a for a in agendas if getattr(a, "professional_id", None) == professional_id
+        ]
+        if not do_profissional:
+            return None, "profissional_sem_agenda"
+        return do_profissional[0], ""
+
+    if len(agendas) == 1:
+        return agendas[0], ""
+    return None, "ambiguo"
+
+
 class SlotsService:
     """
     Database-based slots management to replace Redis
@@ -88,27 +131,34 @@ class SlotsService:
         company_id: int,
         days_ahead: int = 60,
         agenda_id: Optional[int] = None,
-        limit: int = 100
+        limit: int = 100,
+        professional_id: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """Internal method to generate slots with metadata dynamically"""
         try:
             from backend.models import Agenda, AgendaSchedule, Agendamento
 
-            # 1. Fetch Active Agenda
+            # 1. Agendas ativas candidatas
             query = self.db.query(Agenda).filter(
                 Agenda.company_id == company_id,
                 Agenda.active == True
             )
-            if agenda_id:
-                query = query.filter(Agenda.id == agenda_id)
+            agendas = query.all()
 
-            # If no specific agenda requested, we might get multiple active agendas?
-            # For simplicity, default to the first one found or the one marked default?
-            # The previous logic grabbed .first(), so let's stick to that.
-            agenda = query.first()
-
-            if not agenda:
+            # 2. A agenda que RESPONDE: por agenda_id, por professional_id, ou a
+            #    unica existente. Com duas ou mais e nenhum endereco, abstem —
+            #    devolver o horario da Dra. Ana para quem pediu do Dr. Bruno e
+            #    resposta errada, nao resposta aproximada.
+            agenda, motivo = resolver_agenda(
+                agendas, agenda_id=agenda_id, professional_id=professional_id
+            )
+            if agenda is None:
+                logger.info(
+                    "sem agenda para responder (empresa=%s agenda_id=%s professional_id=%s): %s",
+                    company_id, agenda_id, professional_id, motivo,
+                )
                 return []
+            agenda_id = agenda.id
 
             # 2. Setup Time Range
             now = datetime.now()
@@ -163,15 +213,9 @@ class SlotsService:
                 Agendamento.consulta_data <= datetime.combine(end_date, time.max),
                 Agendamento.status != 'CANCELLED'
             )
-            if agenda_id:
-                busy_query = busy_query.filter(Agendamento.agenda_id == agenda_id)
-            elif agenda:
-                 # If we are using a specific agenda (even if auto-selected), we should filter appointments for it?
-                 # Or filter ALL appointments for this company?
-                 # Safer to filter ALL appointments to avoid double booking if multiple agendas exist
-                 # But if agendas represent different resources (rooms/docs), we should only block THIS agenda's appointments.
-                 # Assuming 1 Agenda = 1 Resource for now.
-                 busy_query = busy_query.filter(Agendamento.agenda_id == agenda.id)
+            # A agenda ja esta resolvida: o conflito de horario e SEMPRE dentro
+            # dela. Um agendamento da Dra. Ana nao ocupa a agenda do Dr. Bruno.
+            busy_query = busy_query.filter(Agendamento.agenda_id == agenda.id)
 
             busy_appointments = busy_query.all()
 
@@ -191,6 +235,10 @@ class SlotsService:
                     slot["datetime"] not in busy_dt_set
                     and not self._slot_blocked_by_google(slot["datetime"], agenda.slot_duration, google_busy_intervals)
                 ):
+                     # De quem e o horario: sem isso o chamador nao consegue dizer
+                     # ao paciente COM QUEM ele esta marcando.
+                     slot["agenda_id"] = agenda.id
+                     slot["professional_id"] = getattr(agenda, "professional_id", None)
                      available_slots.append(slot)
                      if len(available_slots) >= limit:
                          break
@@ -208,13 +256,19 @@ class SlotsService:
         company_id: int,
         limit: int = 20,
         days_ahead: int = 30,
-        agenda_id: Optional[int] = None
+        agenda_id: Optional[int] = None,
+        professional_id: Optional[int] = None
     ) -> List[str]:
         """
         Get available slots dynamically based on Agenda configuration.
         Returns simpler list of strings.
+
+        `professional_id` endereca a agenda de UM profissional. Sem ele, so
+        existe resposta quando a empresa tem uma unica agenda ativa.
         """
-        slots = self._generate_dynamic_slots(company_id, days_ahead, agenda_id, limit)
+        slots = self._generate_dynamic_slots(
+            company_id, days_ahead, agenda_id, limit, professional_id=professional_id
+        )
         return [s["datetime"].strftime("%d/%m/%Y %H:%M") for s in slots]
 
     def get_available_slots_filtered(
@@ -224,13 +278,17 @@ class SlotsService:
         time_period: Optional[str] = None,
         day_type: Optional[str] = None,
         limit: int = 20,
-        agenda_id: Optional[int] = None
+        agenda_id: Optional[int] = None,
+        professional_id: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """
         Get available slots using intelligent metadata filtering on dynamic slots.
         """
         # Fetch more slots initially to allow for filtering
-        raw_slots = self._generate_dynamic_slots(company_id, days_ahead=60, agenda_id=agenda_id, limit=300)
+        raw_slots = self._generate_dynamic_slots(
+            company_id, days_ahead=60, agenda_id=agenda_id, limit=300,
+            professional_id=professional_id,
+        )
 
         filtered = []
         for slot in raw_slots:
@@ -248,7 +306,9 @@ class SlotsService:
                 "slot": slot["datetime"].strftime("%d/%m/%Y %H:%M"),
                 "metadata": meta,
                 "service_type": slot["service_type"],
-                "source": slot["source"]
+                "source": slot["source"],
+                "agenda_id": slot.get("agenda_id"),
+                "professional_id": slot.get("professional_id"),
             })
 
             if len(filtered) >= limit:

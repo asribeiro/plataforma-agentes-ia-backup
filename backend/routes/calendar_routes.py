@@ -1,12 +1,42 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from typing import List, Optional
-from pydantic import BaseModel, Field
+"""CRUD de agenda e slots, agora POR PROFISSIONAL (F1-10).
+
+Por que este arquivo mudou: `agendas.professional_id` existe desde a migration
+0009, mas o CRUD criava agenda SEM profissional e a listagem devolvia todas as
+agendas da empresa sem dizer de quem eram. Com mais de um profissional isso vira
+dois defeitos de uma vez:
+
+  1. QUALQUER usuario da empresa ve e edita a agenda de qualquer colega;
+  2. o horario oferecido nao tem dono — nao da para responder "a Dra. Ana tem
+     horario amanha as 15h?".
+
+Regras que passam a valer:
+
+- `professional_id` e OBRIGATORIO no cadastro de agenda nova.
+- O profissional tem de ser da MESMA empresa e estar ativo (senao 404/409).
+- 1 profissional = 1 agenda ATIVA. A garantia dura esta no banco (indice unico
+  parcial uq_agendas_professional_active, WHERE active IS TRUE), mas o erro do
+  banco nao explica nada ao usuario: aqui a checagem vem antes e o
+  IntegrityError tambem e traduzido em 409 com mensagem de negocio.
+- Listagem aceita `professional_id` para filtrar; sem filtro continua
+  devolvendo as agendas da empresa (compatibilidade), agora com o dono visivel.
+
+NAO entra aqui: tela (F1-11) e tools do agente (F1-04).
+"""
+import logging
 from datetime import time, date, datetime, timedelta
-from backend.db import get_db
-from backend.models import Agenda, AgendaSchedule, Company, User
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import and_
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from backend.auth import get_current_user
+from backend.db import get_db
+from backend.models import Agenda, AgendaSchedule, Company, Professional, User
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -21,6 +51,7 @@ class ScheduleBase(BaseModel):
     night_start: Optional[time] = None
     night_end: Optional[time] = None
 
+
 class AgendaBase(BaseModel):
     name: str
     slot_duration: int = Field(..., gt=0)
@@ -30,12 +61,20 @@ class AgendaBase(BaseModel):
     google_calendar_id: Optional[str] = None
     google_calendar_summary: Optional[str] = None
     google_calendar_time_zone: Optional[str] = None
+    # De quem e a agenda. Obrigatorio no cadastro (ver AgendaCreate).
+    professional_id: Optional[int] = None
+
 
 class AgendaCreate(AgendaBase):
+    # Na criacao o vinculo NAO e opcional: agenda sem dono e o defeito que este
+    # card fecha.
+    professional_id: int = Field(..., gt=0)
     schedules: List[ScheduleBase]
+
 
 class AgendaUpdate(AgendaBase):
     schedules: Optional[List[ScheduleBase]] = None
+
 
 class ScheduleResponse(ScheduleBase):
     id: int
@@ -43,6 +82,7 @@ class ScheduleResponse(ScheduleBase):
 
     class Config:
         orm_mode = True
+
 
 class AgendaResponse(AgendaBase):
     id: int
@@ -53,11 +93,13 @@ class AgendaResponse(AgendaBase):
     class Config:
         orm_mode = True
 
+
 class Slot(BaseModel):
     start_time: datetime
     end_time: datetime
 
-# --- Helper ---
+
+# --- Helpers ---
 
 def _company_id_from_user(current_user: User) -> Optional[int]:
     if hasattr(current_user, 'company_id') and current_user.company_id:
@@ -72,6 +114,84 @@ def _company_id_from_user(current_user: User) -> Optional[int]:
         return getattr(first_item, 'id', getattr(first_item, 'company_id', None))
 
     return None
+
+
+def validar_profissional_da_empresa(
+    db: Session, company_id: int, professional_id: int
+) -> Professional:
+    """O profissional tem de ser DESTA empresa e estar ativo.
+
+    Funcao separada de proposito: e a regra que impede uma clinica de vincular
+    agenda ao profissional de outra, e ela precisa ser testavel sem subir a API.
+    """
+    prof = (
+        db.query(Professional)
+        .filter(
+            Professional.id == professional_id,
+            Professional.company_id == company_id,
+        )
+        .first()
+    )
+    if not prof:
+        raise HTTPException(
+            status_code=404,
+            detail="Profissional não encontrado nesta empresa",
+        )
+    if not prof.active:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f'O profissional "{prof.name}" está inativo. Reative o cadastro '
+                "antes de vincular uma agenda a ele."
+            ),
+        )
+    return prof
+
+
+def validar_agenda_unica_ativa(
+    db: Session, professional_id: int, ignorar_agenda_id: Optional[int] = None
+) -> None:
+    """1 profissional = 1 agenda ATIVA.
+
+    Espelha o indice unico parcial do banco (uq_agendas_professional_active),
+    mas com mensagem que o usuario entende: o erro cru do Postgres nao diz o que
+    fazer. `ignorar_agenda_id` permite editar a propria agenda sem colidir
+    consigo mesma.
+    """
+    q = db.query(Agenda).filter(
+        Agenda.professional_id == professional_id,
+        Agenda.active.is_(True),
+    )
+    if ignorar_agenda_id is not None:
+        q = q.filter(Agenda.id != ignorar_agenda_id)
+    existente = q.first()
+    if existente:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Este profissional já tem a agenda ativa \"{existente.name}\". "
+                "Um profissional tem uma agenda só: edite a existente ou "
+                "desative-a antes de criar outra."
+            ),
+        )
+
+
+def _commit_agenda(db: Session) -> None:
+    """Commit com traducao do erro do indice parcial em mensagem de negocio."""
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if "uq_agendas_professional_active" in str(exc.orig):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Este profissional já possui uma agenda ativa. "
+                    "Desative a anterior antes de criar uma nova."
+                ),
+            )
+        raise
+
 
 def generate_slots_for_range(date_obj: date, start: time, end: time, duration: int) -> List[Slot]:
     slots = []
@@ -88,6 +208,7 @@ def generate_slots_for_range(date_obj: date, start: time, end: time, duration: i
 
     return slots
 
+
 # --- Routes ---
 
 @router.post("/", response_model=AgendaResponse)
@@ -100,8 +221,15 @@ def create_agenda(
     if not company_id:
         raise HTTPException(status_code=400, detail="User is not associated with a company")
 
+    # 1) o dono da agenda existe, e desta empresa, e esta ativo
+    validar_profissional_da_empresa(db, company_id, agenda.professional_id)
+    # 2) agenda nova ativa nao pode duplicar a do mesmo profissional
+    if agenda.active:
+        validar_agenda_unica_ativa(db, agenda.professional_id)
+
     db_agenda = Agenda(
         company_id=company_id,
+        professional_id=agenda.professional_id,
         name=agenda.name,
         slot_duration=agenda.slot_duration,
         active=agenda.active,
@@ -112,7 +240,6 @@ def create_agenda(
     db.commit()
     db.refresh(db_agenda)
 
-    # Add schedules
     for sched in agenda.schedules:
         db_sched = AgendaSchedule(
             agenda_id=db_agenda.id,
@@ -126,12 +253,15 @@ def create_agenda(
         )
         db.add(db_sched)
 
-    db.commit()
+    _commit_agenda(db)
     db.refresh(db_agenda)
     return db_agenda
 
+
 @router.get("/", response_model=List[AgendaResponse])
 def list_agendas(
+    professional_id: Optional[int] = Query(None, description="Filtra a agenda de um profissional"),
+    incluir_inativas: bool = Query(False, description="Traz também as agendas desativadas"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -139,7 +269,13 @@ def list_agendas(
     if not company_id:
         return []
 
-    return db.query(Agenda).filter(Agenda.company_id == company_id).all()
+    q = db.query(Agenda).filter(Agenda.company_id == company_id)
+    if professional_id is not None:
+        q = q.filter(Agenda.professional_id == professional_id)
+    if not incluir_inativas:
+        q = q.filter(Agenda.active.is_(True))
+    return q.all()
+
 
 @router.get("/{agenda_id}", response_model=AgendaResponse)
 def get_agenda(
@@ -153,6 +289,7 @@ def get_agenda(
         raise HTTPException(status_code=404, detail="Agenda not found")
     return agenda
 
+
 @router.put("/{agenda_id}", response_model=AgendaResponse)
 def update_agenda(
     agenda_id: int,
@@ -165,11 +302,25 @@ def update_agenda(
     if not db_agenda:
         raise HTTPException(status_code=404, detail="Agenda not found")
 
+    # Trocar o dono da agenda e permitido, mas com a mesma validacao da criacao:
+    # nao se transfere agenda para profissional de outra empresa.
+    novo_profissional = (
+        agenda_update.professional_id
+        if agenda_update.professional_id is not None
+        else db_agenda.professional_id
+    )
+    if novo_profissional is not None and novo_profissional != db_agenda.professional_id:
+        validar_profissional_da_empresa(db, company_id, novo_profissional)
+        if agenda_update.active:
+            validar_agenda_unica_ativa(db, novo_profissional, ignorar_agenda_id=db_agenda.id)
+
     db_agenda.name = agenda_update.name
     db_agenda.slot_duration = agenda_update.slot_duration
     db_agenda.active = agenda_update.active
-    db_agenda.timezone = agenda_update.timezone # Added update for timezone.active
+    db_agenda.timezone = agenda_update.timezone
     db_agenda.safety_margin_minutes = agenda_update.safety_margin_minutes
+    if agenda_update.professional_id is not None:
+        db_agenda.professional_id = agenda_update.professional_id
 
     if agenda_update.schedules is not None:
         # Remove old schedules
@@ -188,9 +339,10 @@ def update_agenda(
             )
             db.add(new_sched)
 
-    db.commit()
+    _commit_agenda(db)
     db.refresh(db_agenda)
     return db_agenda
+
 
 @router.get("/{agenda_id}/slots", response_model=List[Slot])
 def get_available_slots(
