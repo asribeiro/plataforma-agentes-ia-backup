@@ -36,6 +36,8 @@ import AccountProfile from './pages/AccountProfile.tsx';
 import CustomerManagement from './pages/CustomerManagement.tsx';
 import IntegrationsHub from './pages/IntegrationsHub.tsx';
 import TelegramIntegration from './pages/TelegramIntegration.tsx';
+import Procedimentos from './pages/Procedimentos.tsx';
+import Profissionais from './pages/Profissionais.tsx';
 
 const AgendaIntegrationRedirect: React.FC = () => {
   const location = useLocation();
@@ -82,6 +84,10 @@ const App: React.FC = () => {
 
                   {/* Automação centralizada */}
                   <Route path="/follow-up/*" element={<Navigate to="/flows" replace />} />
+
+                  {/* Cadastro da clínica (F1-09) */}
+                  <Route path="/procedimentos" element={<Procedimentos />} />
+                  <Route path="/profissionais" element={<Profissionais />} />
 
                   {/* Configurações da Empresa */}
                   <Route path="/account/profile" element={<AccountProfile />} />

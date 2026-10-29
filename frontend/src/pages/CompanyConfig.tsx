@@ -34,6 +34,7 @@ import api, {
   UserUpdate,
 } from '../services/api';
 import TeamsManagement from '../components/TeamsManagement.tsx';
+import ModalidadePanel from '../components/ModalidadePanel.tsx';
 import { useTheme } from '../contexts/ThemeContext.tsx';
 import {
   AgentiveAlert,
@@ -803,6 +804,7 @@ const CompanyConfig: React.FC = () => {
         </div>
 
         {currentTab === 'overview' && (
+          <div className="space-y-5">
           <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className={agentivePanelClass(isDark, 'p-5')}>
               <div className="mb-5 flex items-center justify-between gap-3">
@@ -863,6 +865,9 @@ const CompanyConfig: React.FC = () => {
               </div>
             </div>
           </section>
+
+          <ModalidadePanel />
+          </div>
         )}
 
         {currentTab === 'users' && (
