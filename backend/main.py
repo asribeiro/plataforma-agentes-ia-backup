@@ -1,5 +1,6 @@
 from backend.routes import services_routes
 from backend.routes import professionals_routes
+from backend.routes import company_flag_routes
 # backend/main.py
 import os
 import secrets
@@ -353,6 +354,7 @@ app.include_router(contacts_import_router, prefix="/webhook", tags=["contacts_im
 app.include_router(contact_archive_router, prefix="/webhook", tags=["contact_archive"])
 app.include_router(services_routes.router)
 app.include_router(professionals_routes.router)
+app.include_router(company_flag_routes.router)
 app.include_router(contact_tasks_router, prefix="/api", tags=["contact_tasks"])
 app.include_router(contact_notes_router, prefix="/api", tags=["contact_notes"])
 
