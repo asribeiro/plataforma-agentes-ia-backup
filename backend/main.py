@@ -193,29 +193,48 @@ if allowed_hosts and "*" not in allowed_hosts:
 app.add_middleware(SecurityHeadersMiddleware)
 
 
+from backend.utils.legado_clinic import (
+    reescrever_caminho_legado,
+    reescrever_query_legada,
+)
+
+
 @app.middleware("http")
 async def legacy_domain_compatibility_middleware(request: Request, call_next):
-    """Accept legacy clinic-shaped URLs/query params while the public API migrates."""
-    path = request.scope.get("path", "")
-    new_path = path
-    replacements = (
-        ("/client-clinics", "/client-companies"),
-        ("/clinics-admin", "/companies-admin"),
-        ("/complete-clinic", "/complete-company"),
-        ("/clinics/", "/companies/"),
-        ("/api/clinic/", "/api/company/"),
-        ("/api/clinic", "/api/company"),
-        ("/clinic/", "/company/"),
-        ("/clinic", "/company"),
-    )
-    for old, new in replacements:
-        new_path = new_path.replace(old, new)
-    if new_path != path:
-        request.scope["path"] = new_path
+    """Accept legacy clinic-shaped URLs/query params while the public API migrates.
 
-    query_string = request.scope.get("query_string", b"")
-    if b"clinic_id=" in query_string:
-        request.scope["query_string"] = query_string.replace(b"clinic_id=", b"company_id=")
+    ATENCAO (29/10): a versao anterior reescrevia `/api/clinic` -> `/api/company`
+    em TODO caminho, sem olhar se o caminho existia. As rotas novas
+    `/api/clinic/users` e `/api/clinic/access-log` (F1-12/F1-13) estavam
+    registradas, casavam no roteador e respondiam 404 porque o middleware comia a
+    URL antes. Agora so reescreve o que e legado de fato: caminho que ja casa com
+    uma rota registrada nao e tocado. Logica e testes em
+    backend/utils/legado_clinic.py.
+    """
+    path = request.scope.get("path", "")
+
+    if "clinic" in path:
+        from starlette.routing import Match
+
+        def _caminho_registrado(candidato: str) -> bool:
+            alvo = dict(request.scope)
+            alvo["path"] = candidato
+            for rota in request.app.router.routes:
+                try:
+                    casou, _ = rota.matches(alvo)
+                except Exception:  # rota exotica (Mount/host): nao decide nada
+                    continue
+                if casou == Match.FULL:
+                    return True
+            return False
+
+        new_path = reescrever_caminho_legado(path, _caminho_registrado)
+        if new_path != path:
+            request.scope["path"] = new_path
+
+    request.scope["query_string"] = reescrever_query_legada(
+        request.scope.get("query_string", b"")
+    )
 
     return await call_next(request)
 
