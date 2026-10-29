@@ -12,10 +12,10 @@ export const branding = Object.freeze({
   supportName: cleanText(import.meta.env.VITE_SUPPORT_NAME, 'Equipe de suporte'),
   supportEmail: cleanText(import.meta.env.VITE_SUPPORT_EMAIL, 'suporte@seu-dominio.com'),
   assets: Object.freeze({
-    logoLight: '/branding/logo-light.svg',
-    logoDark: '/branding/logo-dark.svg',
-    icon: '/branding/icon.svg',
-    iconWhite: '/branding/icon-white.svg',
+    logoLight: '/branding/logo-light.png',
+    logoDark: '/branding/logo-dark.png',
+    icon: '/branding/icon.png',
+    iconWhite: '/branding/icon-white.png',
   }),
 });
 

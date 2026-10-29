@@ -299,7 +299,7 @@ const FlowInspector: React.FC<{
 
     if (isCollapsed) {
         return (
-            <aside className={`hidden min-h-0 w-14 flex-col items-center overflow-hidden rounded-2xl border p-2 shadow-[0_18px_45px_rgba(2,3,35,0.10)] xl:flex ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
+            <aside className={`hidden min-h-0 w-14 flex-col items-center overflow-hidden rounded-2xl border p-2 shadow-[0_18px_45px_rgba(17,17,17,0.10)] xl:flex ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
                 <button
                     type="button"
                     onClick={onToggleCollapsed}
@@ -324,7 +324,7 @@ const FlowInspector: React.FC<{
     }
 
     return (
-        <aside className={`hidden min-h-0 w-full flex-col overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(2,3,35,0.10)] xl:flex ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
+        <aside className={`hidden min-h-0 w-full flex-col overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(17,17,17,0.10)] xl:flex ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
             <div className={`border-b p-4 ${isDark ? 'border-white/10' : 'border-brand/10'}`}>
                 <div className="mb-2 flex items-center justify-between gap-3">
                     <FlowTrafficDots isDark={isDark} />
@@ -957,7 +957,7 @@ const FlowBuilderCanvas: React.FC = () => {
 
     return (
         <div className={`min-h-screen p-3 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-4 ${isDark ? 'bg-brand text-white' : 'bg-brand-canvas text-brand'}`}>
-            <section className={`flex min-h-[calc(100vh-1.5rem-7rem)] flex-col overflow-hidden rounded-[24px] border shadow-[0_22px_55px_rgba(2,3,35,0.12)] sm:h-[calc(100vh-2rem)] sm:min-h-0 ${
+            <section className={`flex min-h-[calc(100vh-1.5rem-7rem)] flex-col overflow-hidden rounded-[24px] border shadow-[0_22px_55px_rgba(17,17,17,0.12)] sm:h-[calc(100vh-2rem)] sm:min-h-0 ${
                 isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
             }`}>
                 <header className={`z-20 border-b px-4 py-3 ${isDark ? 'border-white/10 bg-brand' : 'border-brand/10 bg-white'}`}>
@@ -1045,7 +1045,7 @@ const FlowBuilderCanvas: React.FC = () => {
                     />
 
                     <main
-                        className={`relative min-h-[560px] min-w-0 overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(2,3,35,0.08)] ${isDark ? 'border-white/10 bg-brand' : 'border-brand/10 bg-white'}`}
+                        className={`relative min-h-[560px] min-w-0 overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(17,17,17,0.08)] ${isDark ? 'border-white/10 bg-brand' : 'border-brand/10 bg-white'}`}
                         ref={reactFlowWrapper}
                     >
                     <ReactFlow
@@ -1068,7 +1068,7 @@ const FlowBuilderCanvas: React.FC = () => {
                         maxZoom={2}
                         className={isDark ? 'bg-brand' : 'bg-brand-canvas'}
                     >
-                        <Background color={isDark ? 'rgba(255,255,255,0.16)' : 'rgba(2,3,35,0.18)'} gap={22} size={1} variant={BackgroundVariant.Dots} />
+                        <Background color={isDark ? 'rgba(255,255,255,0.16)' : 'rgba(17,17,17,0.18)'} gap={22} size={1} variant={BackgroundVariant.Dots} />
                         <Controls className={`!rounded-2xl !border !shadow-flat-md ${isDark ? '!border-white/10 !bg-brand !text-white' : '!border-brand/10 !bg-white !text-brand'}`} />
                         <MiniMap
                             nodeColor={(node) => getFlowNodeColor(node.type)}

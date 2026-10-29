@@ -5,7 +5,7 @@
 .crm-lead-inspector__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(2, 3, 35, 0.24);
+  background: rgba(17,17,17, 0.24);
   backdrop-filter: blur(2px);
 }
 
@@ -21,7 +21,7 @@
   border-left: 1px solid var(--crm-modern-border) !important;
   background: var(--crm-modern-surface);
   color: var(--crm-modern-ink);
-  box-shadow: -20px 0 48px rgba(2, 3, 35, 0.12);
+  box-shadow: -20px 0 48px rgba(17,17,17, 0.12);
   animation: crm-inspector-enter 180ms ease-out;
 }
 

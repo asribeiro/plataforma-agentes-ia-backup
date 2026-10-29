@@ -40,7 +40,7 @@ const IntegrationsHub: React.FC = () => {
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           <Link to="/integrations/telegram" className="block focus:outline-none focus:ring-2 focus:ring-brand/30">
-            <div className={agentivePanelClass(isDark, 'group flex h-full flex-col justify-between p-4 transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(2,3,35,0.12)]')}>
+            <div className={agentivePanelClass(isDark, 'group flex h-full flex-col justify-between p-4 transition hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(17,17,17,0.12)]')}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex min-w-0 items-start gap-3">
                   <div className={cx('grid h-12 w-12 shrink-0 place-items-center rounded-2xl', isDark ? 'bg-white text-brand' : 'bg-sky-50 text-sky-600')}>

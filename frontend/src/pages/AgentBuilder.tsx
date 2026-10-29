@@ -2192,7 +2192,7 @@ const HelpFieldLabel: React.FC<{ children: React.ReactNode; help: string }> = ({
             </span>
             <span
                 role="tooltip"
-                className={`pointer-events-none absolute bottom-[calc(100%+8px)] left-0 right-0 z-[999] rounded-xl border px-3 py-2 text-left text-[11px] font-normal leading-4 opacity-0 shadow-[0_18px_45px_rgba(2,3,35,0.18)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
+                className={`pointer-events-none absolute bottom-[calc(100%+8px)] left-0 right-0 z-[999] rounded-xl border px-3 py-2 text-left text-[11px] font-normal leading-4 opacity-0 shadow-[0_18px_45px_rgba(17,17,17,0.18)] transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${
                     isDark ? 'border-white/10 bg-brand text-white/65' : 'border-brand/10 bg-white text-brand/65'
                 }`}
             >
@@ -4837,7 +4837,7 @@ const AgentBuilder: React.FC = () => {
 
     return (
         <div className={agentivePageClass(isDark, 'p-3 pb-[calc(7rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-4')}>
-            <section className={`flex min-h-[calc(100vh-1.5rem-7rem)] flex-col overflow-hidden rounded-[24px] border shadow-[0_22px_55px_rgba(2,3,35,0.12)] sm:h-[calc(100vh-2rem)] sm:min-h-0 ${panelClass}`}>
+            <section className={`flex min-h-[calc(100vh-1.5rem-7rem)] flex-col overflow-hidden rounded-[24px] border shadow-[0_22px_55px_rgba(17,17,17,0.12)] sm:h-[calc(100vh-2rem)] sm:min-h-0 ${panelClass}`}>
             <header className={`z-20 border-b px-4 py-3 ${isDark ? 'border-white/10 bg-brand' : 'border-brand/10 bg-white'}`}>
                 <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                     <div className="flex min-w-0 items-center gap-3">
@@ -5110,7 +5110,7 @@ const AgentBuilder: React.FC = () => {
                         )}
                     </aside>
 
-                <main className={`relative min-h-[560px] min-w-0 overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(2,3,35,0.08)] ${isDark ? 'border-white/10 bg-brand' : 'border-brand/10 bg-white'}`}>
+                <main className={`relative min-h-[560px] min-w-0 overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(17,17,17,0.08)] ${isDark ? 'border-white/10 bg-brand' : 'border-brand/10 bg-white'}`}>
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
@@ -5138,7 +5138,7 @@ const AgentBuilder: React.FC = () => {
                         proOptions={{ hideAttribution: true }}
                         className={isDark ? 'bg-brand' : 'bg-brand-canvas'}
                     >
-                        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color={isDark ? 'rgba(255,255,255,0.16)' : 'rgba(2,3,35,0.18)'} />
+                        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color={isDark ? 'rgba(255,255,255,0.16)' : 'rgba(17,17,17,0.18)'} />
                         <Controls className={`!rounded-2xl !border !shadow-flat-md ${isDark ? '!border-white/10 !bg-brand !text-white' : '!border-brand/10 !bg-white !text-brand'}`} />
                         <MiniMap
                             nodeColor={(node) => KIND_MINIMAP_COLOR[(node.data as AgentNodeData).kind || 'custom']}
@@ -5480,7 +5480,7 @@ const AgentBuilder: React.FC = () => {
                                                     </span>
                                                     <span
                                                         role="tooltip"
-                                                        className={`pointer-events-none absolute bottom-[calc(100%+10px)] ${tooltipAlignment} z-[999] w-[min(18rem,calc(100vw-3rem))] rounded-xl border px-3 py-2 text-left text-[11px] font-normal leading-4 opacity-0 shadow-[0_18px_45px_rgba(2,3,35,0.18)] transition-opacity group-hover:opacity-100 group-focus:opacity-100 ${
+                                                        className={`pointer-events-none absolute bottom-[calc(100%+10px)] ${tooltipAlignment} z-[999] w-[min(18rem,calc(100vw-3rem))] rounded-xl border px-3 py-2 text-left text-[11px] font-normal leading-4 opacity-0 shadow-[0_18px_45px_rgba(17,17,17,0.18)] transition-opacity group-hover:opacity-100 group-focus:opacity-100 ${
                                                             isDark ? 'border-white/10 bg-brand text-white/65' : 'border-brand/10 bg-white text-brand/65'
                                                         }`}
                                                     >
@@ -5834,7 +5834,7 @@ const AgentBuilder: React.FC = () => {
 
             {configuringToolId === CALENDAR_TOOL_ID && selectedNode && selectedToolIds.includes(CALENDAR_TOOL_ID) && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand/60 px-3 py-4 backdrop-blur-sm">
-                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(2,3,35,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
+                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(17,17,17,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
                         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-brand/10 bg-brand-canvas'}`}>
                             <div className="flex min-w-0 items-start gap-3">
                                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>
@@ -6034,7 +6034,7 @@ const AgentBuilder: React.FC = () => {
 
             {configuringToolId === CRM_PIPELINE_TOOL_ID && selectedNode && selectedToolIds.includes(CRM_PIPELINE_TOOL_ID) && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand/60 px-3 py-4 backdrop-blur-sm">
-                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(2,3,35,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
+                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(17,17,17,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
                         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-brand/10 bg-brand-canvas'}`}>
                             <div className="flex min-w-0 items-start gap-3">
                                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>
@@ -6190,7 +6190,7 @@ const AgentBuilder: React.FC = () => {
 
             {configuringToolId === DYNAMIC_CRM_FOLLOWUP_TOOL_ID && selectedNode && selectedToolIds.includes(DYNAMIC_CRM_FOLLOWUP_TOOL_ID) && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand/60 px-3 py-4 backdrop-blur-sm">
-                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(2,3,35,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
+                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(17,17,17,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
                         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-brand/10 bg-brand-canvas'}`}>
                             <div className="flex min-w-0 items-start gap-3">
                                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>
@@ -6540,7 +6540,7 @@ const AgentBuilder: React.FC = () => {
 
             {configuringToolId === WHATSAPP_CONTACT_CARD_TOOL_ID && selectedNode && selectedToolIds.includes(WHATSAPP_CONTACT_CARD_TOOL_ID) && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand/60 px-3 py-4 backdrop-blur-sm">
-                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(2,3,35,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
+                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-4xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(17,17,17,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
                         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-brand/10 bg-brand-canvas'}`}>
                             <div className="flex min-w-0 items-start gap-3">
                                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>
@@ -6664,7 +6664,7 @@ const AgentBuilder: React.FC = () => {
 
             {configuringToolId === WHATSAPP_SCHEDULED_FOLLOWUP_TOOL_ID && selectedNode && selectedToolIds.includes(WHATSAPP_SCHEDULED_FOLLOWUP_TOOL_ID) && (
                 <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand/60 px-3 py-4 backdrop-blur-sm">
-                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(2,3,35,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
+                    <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] border shadow-[0_28px_90px_rgba(17,17,17,0.34)] ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'}`}>
                         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${isDark ? 'border-white/10 bg-white/[0.03]' : 'border-brand/10 bg-brand-canvas'}`}>
                             <div className="flex min-w-0 items-start gap-3">
                                 <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>
@@ -6746,7 +6746,7 @@ const AgentBuilder: React.FC = () => {
             {showNewAgentModal && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
                     <div className="fixed inset-0 bg-brand/55 backdrop-blur-sm" onClick={() => setShowNewAgentModal(false)} />
-                    <div className={`relative z-[10000] w-full max-w-lg overflow-hidden rounded-2xl border shadow-[0_24px_70px_rgba(2,3,35,0.28)] ${
+                    <div className={`relative z-[10000] w-full max-w-lg overflow-hidden rounded-2xl border shadow-[0_24px_70px_rgba(17,17,17,0.28)] ${
                         isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
                     }`}>
                         <div className={`flex items-start justify-between gap-4 border-b px-5 py-4 ${isDark ? 'border-white/10' : 'border-brand/10'}`}>

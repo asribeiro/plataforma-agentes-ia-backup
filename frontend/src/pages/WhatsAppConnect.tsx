@@ -1040,7 +1040,7 @@ const WhatsAppConnectPage: React.FC = () => {
   const pageClass = isDark ? 'bg-brand text-white' : 'bg-brand-canvas text-brand';
   const panelClass = isDark
     ? 'border-white/10 bg-white/[0.06] shadow-[0_22px_55px_rgba(0,0,0,0.22)]'
-    : 'border-brand/10 bg-white shadow-[0_22px_55px_rgba(2,3,35,0.08)]';
+    : 'border-brand/10 bg-white shadow-[0_22px_55px_rgba(17,17,17,0.08)]';
   const softPanelClass = isDark ? 'border-white/10 bg-white/[0.05]' : 'border-brand/10 bg-brand-canvas';
   const mutedClass = isDark ? 'text-white/55' : 'text-brand/55';
   const subtleClass = isDark ? 'text-white/40' : 'text-brand/40';
@@ -1214,7 +1214,7 @@ const WhatsAppConnectPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setSelectedProvider('waha')}
-            className={`group rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(2,3,35,0.10)] ${softPanelClass}`}
+            className={`group rounded-2xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(17,17,17,0.10)] ${softPanelClass}`}
           >
             <div className="flex items-start gap-3">
               <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>
@@ -1440,7 +1440,7 @@ const WhatsAppConnectPage: React.FC = () => {
             <img
               src={deviceData.imgUrl}
               alt="Perfil"
-              className="h-16 w-16 shrink-0 rounded-2xl border border-brand/10 object-cover shadow-[0_12px_30px_rgba(2,3,35,0.12)]"
+              className="h-16 w-16 shrink-0 rounded-2xl border border-brand/10 object-cover shadow-[0_12px_30px_rgba(17,17,17,0.12)]"
             />
           ) : (
             <div className={`grid h-16 w-16 shrink-0 place-items-center rounded-2xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>

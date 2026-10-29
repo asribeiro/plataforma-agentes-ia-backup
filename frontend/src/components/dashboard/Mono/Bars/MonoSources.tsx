@@ -3,7 +3,7 @@ import type { FunnelBySourceItem } from '../../../../services/api';
 import { MonoEmpty } from '../States/MonoStates';
 import { formatNumber } from '../utils/format';
 
-const PALETTE = ['#020323', 'rgba(2,3,35,0.55)', '#0f766e', 'rgba(2,3,35,0.30)', 'rgba(2,3,35,0.18)', '#6b7280'];
+const PALETTE = ['#111111', 'rgba(17,17,17,0.55)', '#0f766e', 'rgba(17,17,17,0.30)', 'rgba(17,17,17,0.18)', '#6b7280'];
 
 interface MonoSourcesProps {
   sources: FunnelBySourceItem[];

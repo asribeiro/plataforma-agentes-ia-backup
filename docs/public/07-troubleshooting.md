@@ -82,7 +82,7 @@ Em produção:
 ## O logo ou o nome antigo continua aparecendo
 
 1. confira `frontend/.env.local` ou `frontend/.env.production`;
-2. confirme os quatro SVGs em `frontend/public/branding/`;
+2. confirme os quatro arquivos de marca em `frontend/public/branding/`;
 3. reinicie o Vite, ou refaça o build de produção;
 4. publique todo o novo diretório `frontend/build`;
 5. limpe cache do navegador, proxy ou CDN;

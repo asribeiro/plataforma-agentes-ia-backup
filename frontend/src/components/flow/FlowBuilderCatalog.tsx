@@ -269,7 +269,7 @@ export const FlowNodeLibrary: React.FC<FlowNodeLibraryProps> = ({
 
     if (isCollapsed) {
         return (
-            <aside className={`flex max-h-[360px] min-h-0 w-14 flex-col items-center overflow-hidden rounded-2xl border p-2 shadow-[0_18px_45px_rgba(2,3,35,0.10)] lg:max-h-none ${
+            <aside className={`flex max-h-[360px] min-h-0 w-14 flex-col items-center overflow-hidden rounded-2xl border p-2 shadow-[0_18px_45px_rgba(17,17,17,0.10)] lg:max-h-none ${
                 isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
             }`}>
                 <button
@@ -321,7 +321,7 @@ export const FlowNodeLibrary: React.FC<FlowNodeLibraryProps> = ({
     }
 
     return (
-        <aside className={`flex max-h-[360px] min-h-0 w-full flex-col overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(2,3,35,0.10)] lg:max-h-none ${
+        <aside className={`flex max-h-[360px] min-h-0 w-full flex-col overflow-hidden rounded-2xl border shadow-[0_18px_45px_rgba(17,17,17,0.10)] lg:max-h-none ${
             isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
         }`}>
             <div className={`border-b p-4 ${isDark ? 'border-white/10' : 'border-brand/10'}`}>

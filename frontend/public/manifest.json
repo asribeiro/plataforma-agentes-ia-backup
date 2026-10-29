@@ -3,20 +3,20 @@
   "name": "SUA_EMPRESA - personalize este manifesto",
   "icons": [
     {
-      "src": "branding/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "branding/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "branding/icon-white.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "branding/icon-white.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "maskable"
     }
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#020323",
+  "theme_color": "#111111",
   "background_color": "#f7f7f7"
 }

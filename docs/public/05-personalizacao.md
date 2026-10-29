@@ -17,23 +17,23 @@ Esses valores são públicos e aparecerão no bundle. O e-mail deve ser uma caix
 
 ## Arquivos de marca
 
-Substitua os SVGs em:
+Substitua os arquivos em:
 
 ```text
-frontend/public/branding/logo-light.svg
-frontend/public/branding/logo-dark.svg
-frontend/public/branding/icon.svg
-frontend/public/branding/icon-white.svg
+frontend/public/branding/logo-light.png
+frontend/public/branding/logo-dark.png
+frontend/public/branding/icon.png
+frontend/public/branding/icon-white.png
 ```
 
 Orientação:
 
-- `logo-light.svg`: logo para fundos claros.
-- `logo-dark.svg`: logo para fundos escuros.
-- `icon.svg`: ícone colorido, aproximadamente quadrado.
-- `icon-white.svg`: versão monocromática clara.
+- `logo-light.png`: logo para fundos claros.
+- `logo-dark.png`: logo para fundos escuros.
+- `icon.png`: ícone colorido, 512x512 com fundo transparente.
+- `icon-white.png`: versão monocromática clara, 512x512.
 
-Mantenha os nomes e caminhos para não alterar componentes. Os SVGs distribuídos são placeholders editáveis; não deixe `SUA_EMPRESA` visível na versão final.
+Mantenha os nomes e caminhos para não alterar componentes. Não deixe `SUA_EMPRESA` visível na versão final.
 
 Não adicione arquivos com dados de clientes, assinaturas pessoais, metadados sensíveis ou URLs de armazenamento privado.
 

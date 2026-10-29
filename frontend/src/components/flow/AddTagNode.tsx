@@ -207,7 +207,7 @@ const AddTagNode = ({ data, id, selected, isConnectable }: NodeProps) => {
                         <div className="flex items-center gap-2">
                             <span
                                 className="h-3 w-3 shrink-0 rounded-full border border-white/40"
-                                style={{ backgroundColor: selectedTag.color || '#020323' }}
+                                style={{ backgroundColor: selectedTag.color || '#111111' }}
                             />
                             <div className="min-w-0">
                                 <p className="truncate text-sm font-semibold">{selectedTag.name}</p>

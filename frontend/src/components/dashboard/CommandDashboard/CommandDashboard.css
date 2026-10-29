@@ -1,15 +1,15 @@
 .command-dashboard {
-  --cmd-brand: #020323;
-  --cmd-brand-soft: rgba(2, 3, 35, 0.64);
-  --cmd-brand-muted: rgba(2, 3, 35, 0.46);
-  --cmd-brand-faint: rgba(2, 3, 35, 0.28);
+  --cmd-brand: #111111;
+  --cmd-brand-soft: rgba(17,17,17, 0.64);
+  --cmd-brand-muted: rgba(17,17,17, 0.46);
+  --cmd-brand-faint: rgba(17,17,17, 0.28);
   --cmd-canvas: #f7f7f7;
   --cmd-surface: #ffffff;
   --cmd-surface-muted: #f1f3f5;
   --cmd-surface-raised: #ffffff;
-  --cmd-border: rgba(2, 3, 35, 0.1);
-  --cmd-border-strong: rgba(2, 3, 35, 0.18);
-  --cmd-hover: rgba(2, 3, 35, 0.045);
+  --cmd-border: rgba(17,17,17, 0.1);
+  --cmd-border-strong: rgba(17,17,17, 0.18);
+  --cmd-hover: rgba(17,17,17, 0.045);
   --cmd-focus: rgba(37, 99, 235, 0.26);
   --cmd-success: #0f766e;
   --cmd-success-bg: rgba(15, 118, 110, 0.1);
@@ -23,8 +23,8 @@
   --cmd-radius-md: 8px;
   --cmd-radius-lg: 12px;
   --cmd-radius-xl: 16px;
-  --cmd-shadow-sm: 0 1px 2px rgba(2, 3, 35, 0.04);
-  --cmd-shadow-panel: 0 10px 30px rgba(2, 3, 35, 0.055);
+  --cmd-shadow-sm: 0 1px 2px rgba(17,17,17, 0.04);
+  --cmd-shadow-panel: 0 10px 30px rgba(17,17,17, 0.055);
   min-height: 100vh;
   padding: 20px 24px calc(96px + env(safe-area-inset-bottom));
   background: var(--cmd-canvas);
@@ -37,7 +37,7 @@
   --cmd-brand-soft: rgba(247, 247, 247, 0.68);
   --cmd-brand-muted: rgba(247, 247, 247, 0.5);
   --cmd-brand-faint: rgba(247, 247, 247, 0.34);
-  --cmd-canvas: #020323;
+  --cmd-canvas: #111111;
   --cmd-surface: rgba(255, 255, 255, 0.06);
   --cmd-surface-muted: rgba(255, 255, 255, 0.08);
   --cmd-surface-raised: #08092f;
@@ -175,13 +175,13 @@
 
 .command-button--primary {
   border-color: transparent;
-  background: #020323;
+  background: #111111;
   color: #ffffff;
 }
 
 .command-dashboard--dark .command-button--primary {
   background: #ffffff;
-  color: #020323;
+  color: #111111;
 }
 
 .command-button--ghost {
@@ -960,7 +960,7 @@
   place-items: center;
   padding: 24px;
   background: var(--cmd-canvas, #f7f7f7);
-  color: var(--cmd-brand, #020323);
+  color: var(--cmd-brand, #111111);
 }
 
 .command-loading-box,
@@ -975,8 +975,8 @@
 .command-spinner {
   width: 42px;
   height: 42px;
-  border: 3px solid rgba(2, 3, 35, 0.12);
-  border-top-color: #020323;
+  border: 3px solid rgba(17,17,17, 0.12);
+  border-top-color: #111111;
   border-radius: 999px;
   animation: command-spin 900ms linear infinite;
 }

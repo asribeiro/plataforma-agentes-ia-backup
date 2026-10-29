@@ -488,7 +488,7 @@ const WhatsAppPreview = ({
       </div>
 
       <div className="p-4">
-        <div className="mx-auto max-w-[360px] overflow-hidden rounded-[28px] border border-brand/20 bg-brand p-2 shadow-[0_18px_44px_rgba(2,3,35,0.2)]">
+        <div className="mx-auto max-w-[360px] overflow-hidden rounded-[28px] border border-brand/20 bg-brand p-2 shadow-[0_18px_44px_rgba(17,17,17,0.2)]">
           <div className="overflow-hidden rounded-[22px] bg-[#efeae2]">
             <div className="flex items-center gap-3 bg-[#075e54] px-3 py-3 text-white">
               <div className="grid h-9 w-9 place-items-center rounded-full bg-white/15">
@@ -987,7 +987,7 @@ const FollowUp: React.FC = () => {
               isActive
                 ? isDark
                   ? 'border-white bg-white text-brand shadow-[0_10px_24px_rgba(255,255,255,0.08)]'
-                  : 'border-brand bg-brand text-white shadow-[0_10px_24px_rgba(2,3,35,0.12)]'
+                  : 'border-brand bg-brand text-white shadow-[0_10px_24px_rgba(17,17,17,0.12)]'
                 : isDark
                   ? 'border-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.06] hover:text-white'
                   : 'border-transparent text-brand/55 hover:border-brand/10 hover:bg-white hover:text-brand'
@@ -1077,7 +1077,7 @@ const FollowUp: React.FC = () => {
                 <div className="flex items-start gap-3">
                   <span
                     className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-current/10"
-                    style={{ backgroundColor: stage.color || '#020323' }}
+                    style={{ backgroundColor: stage.color || '#111111' }}
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{stage.name}</span>

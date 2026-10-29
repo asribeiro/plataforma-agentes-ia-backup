@@ -4,16 +4,16 @@
    newswire/ruled), D (focus glow/LIVE/dual-bar/literais JS),
    B (stat-strip 4/skeleton/accent-contrast/bottom-sheet).
    Escopo: .mono-dashboard ; dark via .mono-dashboard--dark
-   Marca hard: ink #020323 / canvas #f7f7f7 / surface #ffffff
+   Marca hard: ink #111111 / canvas #f7f7f7 / surface #ffffff
    Fontes (já importadas em index.css): Inter (UI), Lexend Deca (data-display)
    Coerência sidebar: estado ativo = CÓPIA LITERAL do .navItemActive.
    ============================================================ */
 .mono-dashboard {
   /* — Ink ramp (único acento de marca). muted SUBIDO p/ .62 (AA ~5.5:1). — */
-  --mono-ink: #020323;
-  --mono-ink-soft: rgba(2, 3, 35, 0.68);
-  --mono-ink-muted: rgba(2, 3, 35, 0.62);
-  --mono-ink-faint: rgba(2, 3, 35, 0.32); /* DECORAÇÃO ONLY: tracks/hairlines */
+  --mono-ink: #111111;
+  --mono-ink-soft: rgba(17,17,17, 0.68);
+  --mono-ink-muted: rgba(17,17,17, 0.62);
+  --mono-ink-faint: rgba(17,17,17, 0.32); /* DECORAÇÃO ONLY: tracks/hairlines */
 
   /* — Surfaces (mapeiam globals --bg-main/--bg-card/--hover-bg) — */
   --mono-canvas: #f7f7f7;
@@ -21,16 +21,16 @@
   --mono-sunken: #fafafa; /* header de tabela, rodapé de chart */
 
   /* — Hairlines: 1px é a linguagem — */
-  --mono-hairline: rgba(2, 3, 35, 0.08);
-  --mono-hairline-strong: rgba(2, 3, 35, 0.16);
+  --mono-hairline: rgba(17,17,17, 0.08);
+  --mono-hairline-strong: rgba(17,17,17, 0.16);
 
   /* — Interação (CÓPIA LITERAL do .navItemActive da sidebar) — */
-  --mono-hover: rgba(2, 3, 35, 0.04);
+  --mono-hover: rgba(17,17,17, 0.04);
   --mono-active-bg: var(--bg-main, #ffffff);
-  --mono-active-ring: inset 0 0 0 1px var(--border-color, rgba(2, 3, 35, 0.08)),
-    var(--shadow-sm, 0 1px 2px 0 rgba(2, 3, 35, 0.05));
+  --mono-active-ring: inset 0 0 0 1px var(--border-color, rgba(17,17,17, 0.08)),
+    var(--shadow-sm, 0 1px 2px 0 rgba(17,17,17, 0.05));
 
-  --mono-focus: 0 0 0 3px rgba(2, 3, 35, 0.12);
+  --mono-focus: 0 0 0 3px rgba(17,17,17, 0.12);
   --mono-disabled-opacity: 0.45;
 
   /* — Signal teal (única cor cromática; ~5.0:1 sobre #fff/#fafafa) — */
@@ -46,14 +46,14 @@
   --mono-info: #1d4ed8;
 
   /* — Rampa categórica de chart (dash aplicado via JS em MonoChartTheme) — */
-  --mono-c0: #020323; /* Leads — ink solid */
-  --mono-c1: rgba(2, 3, 35, 0.55);
-  --mono-c2: rgba(2, 3, 35, 0.3); /* + dash '4 3' */
+  --mono-c0: #111111; /* Leads — ink solid */
+  --mono-c1: rgba(17,17,17, 0.55);
+  --mono-c2: rgba(17,17,17, 0.3); /* + dash '4 3' */
   --mono-c3: var(--mono-signal); /* Vendas/convertidos — teal */
-  --mono-c4: rgba(2, 3, 35, 0.18); /* + dotted '2 3' */
-  --mono-c5: rgba(2, 3, 35, 0.12); /* + long-dash '7 4' */
+  --mono-c4: rgba(17,17,17, 0.18); /* + dotted '2 3' */
+  --mono-c5: rgba(17,17,17, 0.12); /* + long-dash '7 4' */
   --mono-c6: #6b7280; /* escape / 'Outros' */
-  --mono-grid: rgba(2, 3, 35, 0.06);
+  --mono-grid: rgba(17,17,17, 0.06);
 
   /* — Radii (instrumento afiado; sidebar nav = 7px) — */
   --mono-r-xs: 4px;
@@ -63,8 +63,8 @@
 
   /* — Sombras: quase zero. hairline OBRIGATÓRIO em low-DPI. — */
   --mono-shadow-flat: none;
-  --mono-shadow-hairline: 0 1px 0 rgba(2, 3, 35, 0.02);
-  --mono-shadow-pop: 0 4px 16px rgba(2, 3, 35, 0.08);
+  --mono-shadow-hairline: 0 1px 0 rgba(17,17,17, 0.02);
+  --mono-shadow-pop: 0 4px 16px rgba(17,17,17, 0.08);
 
   /* — Forecast: barra mínima + alpha mínimo do outline — */
   --mono-bar-min-h: 3px;
@@ -149,7 +149,7 @@
   --mono-ink-muted: rgba(247, 247, 247, 0.6);
   --mono-ink-faint: rgba(247, 247, 247, 0.34);
 
-  --mono-canvas: #020323;
+  --mono-canvas: #111111;
   --mono-surface: #08091f;
   --mono-sunken: #0b0d24;
 
@@ -1353,7 +1353,7 @@
   place-items: center;
   padding: var(--mono-s6);
   background: var(--mono-canvas, #f7f7f7);
-  color: var(--mono-ink, #020323);
+  color: var(--mono-ink, #111111);
 }
 
 .mono-loading-box,
