@@ -64,6 +64,7 @@ import {
 } from '../services/api';
 import { useUserPermissions } from '../hooks/useUserPermissions.ts';
 import { filterMenusByPermissions, type MenuItem, type SubItem } from '../services/permissionService.ts';
+import { usePapelClinico } from '../hooks/usePapelClinico.ts';
 import {
   SIDEBAR_MODULE_MENUS,
   resolveActiveModule,
@@ -233,12 +234,18 @@ const ProtectedLayout: React.FC = () => {
     : undefined;
   const isManagedCustomerWorkspace = Boolean(activeCompany?.managed_link_id || activeCompany?.managed_customer_id);
   const navigationModule = isManagedCustomerWorkspace && activeModule === 'clientes' ? 'dashboard' : activeModule;
+  // Papel clinico do usuario logado (F1-12). O menu lateral filtra por permissao
+  // de equipe, que nao conhece papel clinico; o item "Equipe" so pode aparecer
+  // para quem administra usuarios da clinica. Este hook busca GET
+  // /api/clinic/users/eu uma vez por carga e grava a flag lida pelo filtro.
+  const { eu: euClinica } = usePapelClinico();
+
   const sidebarModuleMenus = useMemo(() => (
     (Object.keys(SIDEBAR_MODULE_MENUS) as ModuleKey[]).reduce((menus, moduleKey) => {
       menus[moduleKey] = filterMenusByPermissions(SIDEBAR_MODULE_MENUS[moduleKey] || []);
       return menus;
     }, {} as Record<ModuleKey, MenuItem[]>)
-  ), [permissions]);
+  ), [permissions, euClinica?.pode_administrar_usuarios]);
   const currentMenuItems = sidebarModuleMenus[navigationModule] || [];
 
   const allMobileMenuItems = [
