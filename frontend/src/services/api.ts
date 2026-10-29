@@ -79,7 +79,7 @@ function getResponseHeader(headers: any, name: string, fallback: string): string
   return typeof value === 'string' ? value : fallback;
 }
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_URL,
   headers: {
     Accept: 'application/json',
