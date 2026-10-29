@@ -199,24 +199,24 @@ const NotificationTray: React.FC<NotificationTrayProps> = ({ isCollapsed, websoc
                 <p className={styles.emptyStateSubtitle}>Nenhuma notificação por enquanto.</p>
               </div>
             ) : (
-              notifications.map((n, i) => (
+              notifications.filter(isTaskReminderNotification).map((n, i) => (
                   <div
-                    key={`${n.task.id}-${i}`}
+                    key={`${n.task?.id ?? i}-${i}`}
                     className={`${styles.notificationItem} ${n.is_overdue ? styles.notificationItemOverdue : styles.notificationItemTask}`}
                     onClick={() => {
-                      navigate('/chat', { state: { selectedPhone: n.task.contact.phone, selectedContact: n.task.contact } });
+                      navigate('/chat', { state: { selectedPhone: n.task?.contact?.phone, selectedContact: n.task?.contact } });
                       setIsOpen(false);
                     }}
                   >
                     <div className={styles.notificationItemHeader}>
                       <span className={`${styles.notificationItemTitle} ${n.is_overdue ? styles.textOverdue : ''}`}>
-                        {n.task.title}
+                        {n.task?.title ?? 'Tarefa'}
                       </span>
                       <span className={styles.taskTypeIconWrapper}>
-                        {getTaskTypeIcon(n.task.task_type)}
+                        {getTaskTypeIcon(n.task?.task_type)}
                       </span>
                     </div>
-                    <p className={styles.notificationItemSubtitle}>{n.task.contact.name}</p>
+                    <p className={styles.notificationItemSubtitle}>{n.task?.contact?.name ?? ''}</p>
 
                     <div className={`${styles.notificationItemTime} ${n.is_overdue ? styles.textOverdue : ''}`}>
                       {n.is_overdue ? <AlertCircle className={styles.timeIcon} /> : <Clock className={styles.timeIcon} />}
