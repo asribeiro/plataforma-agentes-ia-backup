@@ -44,7 +44,7 @@ const CalendarConfigPage: React.FC = () => {
     const pageClass = isDark ? 'bg-brand text-white' : 'bg-brand-canvas text-brand';
     const panelClass = isDark
         ? 'border-white/10 bg-white/[0.06] shadow-[0_22px_55px_rgba(0,0,0,0.22)]'
-        : 'border-brand/10 bg-white shadow-[0_22px_55px_rgba(2,3,35,0.08)]';
+        : 'border-brand/10 bg-white shadow-[0_22px_55px_rgba(17,17,17,0.08)]';
     const mutedClass = isDark ? 'text-white/55' : 'text-brand/55';
 
     return (
@@ -76,7 +76,7 @@ const CalendarConfigPage: React.FC = () => {
                                             isActive
                                                 ? isDark
                                                     ? 'border-white bg-white text-brand shadow-[0_10px_24px_rgba(255,255,255,0.08)]'
-                                                    : 'border-brand bg-brand text-white shadow-[0_10px_24px_rgba(2,3,35,0.12)]'
+                                                    : 'border-brand bg-brand text-white shadow-[0_10px_24px_rgba(17,17,17,0.12)]'
                                                 : isDark
                                                     ? 'border-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.06] hover:text-white'
                                                     : 'border-transparent text-brand/55 hover:border-brand/10 hover:bg-white hover:text-brand'

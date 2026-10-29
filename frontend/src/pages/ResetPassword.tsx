@@ -139,7 +139,7 @@ const ResetPassword = () => {
 
       <section className="flex min-h-[calc(100vh-220px)] items-center justify-center px-4 py-8 sm:px-6 lg:min-h-screen lg:px-10">
         <div className="w-full max-w-[560px]">
-          <div className="rounded-2xl border border-brand/10 bg-white p-5 shadow-[0_24px_80px_rgba(2,3,35,0.08)] sm:p-7">
+          <div className="rounded-2xl border border-brand/10 bg-white p-5 shadow-[0_24px_80px_rgba(17,17,17,0.08)] sm:p-7">
             <div className="mb-6">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand/35">
                 {isConfirmMode ? 'Nova senha' : 'Redefinir senha'}

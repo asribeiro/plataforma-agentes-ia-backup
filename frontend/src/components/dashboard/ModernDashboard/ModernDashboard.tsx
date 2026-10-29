@@ -292,7 +292,7 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
   const gradientId = `modern-chart-${useId().replace(/:/g, '')}`;
   const palette = isDark
     ? { axis: 'rgba(247,247,247,.56)', grid: 'rgba(255,255,255,.08)', signal: '#2dd4bf', tooltip: '#08091f', border: 'rgba(255,255,255,.14)' }
-    : { axis: 'rgba(2,3,35,.56)', grid: 'rgba(2,3,35,.07)', signal: '#0f766e', tooltip: '#ffffff', border: 'rgba(2,3,35,.12)' };
+    : { axis: 'rgba(17,17,17,.56)', grid: 'rgba(17,17,17,.07)', signal: '#0f766e', tooltip: '#ffffff', border: 'rgba(17,17,17,.12)' };
 
   if (chartData.length === 0) {
     return <div className="modern-empty">Nenhuma movimentação no período selecionado.</div>;
@@ -323,8 +323,8 @@ const PerformanceChart: React.FC<PerformanceChartProps> = ({
               background: palette.tooltip,
               border: `1px solid ${palette.border}`,
               borderRadius: 8,
-              boxShadow: '0 8px 24px rgba(2,3,35,.10)',
-              color: isDark ? '#f7f7f7' : '#020323',
+              boxShadow: '0 8px 24px rgba(17,17,17,.10)',
+              color: isDark ? '#f7f7f7' : '#111111',
               fontSize: 12,
             }}
             formatter={(value: number) => [metric === 'conversion' ? formatPercent(value) : formatNumber(value), chartMetricLabel[metric]]}

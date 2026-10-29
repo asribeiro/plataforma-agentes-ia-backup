@@ -217,7 +217,7 @@ export const AgentiveConfirmModal: React.FC<AgentiveConfirmModalProps> = ({
     <div className={joinClasses('fixed inset-0 z-[9999] flex items-center justify-center p-4', isModern && 'crm-work-modal', isModern && isDark && 'crm-work-modal--dark')}>
       <div className={isModern ? 'fixed inset-0 crm-modern-modal-root' : 'fixed inset-0 bg-brand/55 backdrop-blur-sm'} onClick={isLoading ? undefined : onClose} />
       <div
-        className={`${isModern ? 'crm-modern-modal crm-confirm-modal' : ''} relative z-[10000] w-full max-w-md overflow-hidden rounded-2xl border p-5 shadow-[0_24px_70px_rgba(2,3,35,0.28)] ${
+        className={`${isModern ? 'crm-modern-modal crm-confirm-modal' : ''} relative z-[10000] w-full max-w-md overflow-hidden rounded-2xl border p-5 shadow-[0_24px_70px_rgba(17,17,17,0.28)] ${
           isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
         }`}
       >

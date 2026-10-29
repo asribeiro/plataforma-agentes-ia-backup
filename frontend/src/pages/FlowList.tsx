@@ -399,7 +399,7 @@ const FlowList: React.FC = () => {
                     <div className="fixed inset-0 bg-brand/55 backdrop-blur-sm" onClick={creating ? undefined : () => setIsCreateOpen(false)} />
                     <form
                         onSubmit={handleCreateFlow}
-                        className={`relative z-[10000] w-full max-w-lg overflow-hidden rounded-2xl border p-5 shadow-[0_24px_70px_rgba(2,3,35,0.28)] ${
+                        className={`relative z-[10000] w-full max-w-lg overflow-hidden rounded-2xl border p-5 shadow-[0_24px_70px_rgba(17,17,17,0.28)] ${
                             isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
                         }`}
                     >

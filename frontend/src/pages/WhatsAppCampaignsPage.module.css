@@ -7,14 +7,14 @@
   --camp-canvas: #f7f7f7;
   --camp-surface: #ffffff;
   --camp-surface-muted: #fafafa;
-  --camp-ink: #020323;
-  --camp-ink-soft: rgba(2, 3, 35, 0.66);
-  --camp-ink-muted: rgba(2, 3, 35, 0.52);
-  --camp-ink-faint: rgba(2, 3, 35, 0.38);
-  --camp-border: rgba(2, 3, 35, 0.1);
-  --camp-border-strong: rgba(2, 3, 35, 0.18);
-  --camp-hover: rgba(2, 3, 35, 0.04);
-  --camp-active: rgba(2, 3, 35, 0.06);
+  --camp-ink: #111111;
+  --camp-ink-soft: rgba(17,17,17, 0.66);
+  --camp-ink-muted: rgba(17,17,17, 0.52);
+  --camp-ink-faint: rgba(17,17,17, 0.38);
+  --camp-border: rgba(17,17,17, 0.1);
+  --camp-border-strong: rgba(17,17,17, 0.18);
+  --camp-hover: rgba(17,17,17, 0.04);
+  --camp-active: rgba(17,17,17, 0.06);
   --camp-signal: #0f766e;
   --camp-signal-soft: rgba(15, 118, 110, 0.1);
   --camp-danger: #dc2626;
@@ -23,10 +23,10 @@
   --camp-success-soft: rgba(22, 163, 74, 0.09);
   --camp-warning: #b45309;
   --camp-warning-soft: rgba(180, 83, 9, 0.1);
-  --camp-overlay: rgba(2, 3, 35, 0.64);
-  --camp-focus: 0 0 0 3px rgba(2, 3, 35, 0.12);
-  --camp-shadow: 0 1px 2px rgba(2, 3, 35, 0.025);
-  --camp-shadow-hover: 0 5px 16px rgba(2, 3, 35, 0.075);
+  --camp-overlay: rgba(17,17,17, 0.64);
+  --camp-focus: 0 0 0 3px rgba(17,17,17, 0.12);
+  --camp-shadow: 0 1px 2px rgba(17,17,17, 0.025);
+  --camp-shadow-hover: 0 5px 16px rgba(17,17,17, 0.075);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   line-height: 1.45;
@@ -35,7 +35,7 @@
 }
 
 .root--dark {
-  --camp-canvas: #020323;
+  --camp-canvas: #111111;
   --camp-surface: #08091f;
   --camp-surface-muted: #0b0d24;
   --camp-ink: #f7f7f7;

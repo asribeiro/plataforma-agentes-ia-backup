@@ -20,7 +20,7 @@
 }
 
 .triggerButton:focus-visible {
-  outline: 2px solid var(--focus-border, rgba(2, 3, 35, 0.28));
+  outline: 2px solid var(--focus-border, rgba(17,17,17, 0.28));
   outline-offset: 2px;
 }
 
@@ -82,7 +82,7 @@
   border-radius: 10px;
   border: 1px solid var(--border-color, #f0f0f0);
   padding: 8px;
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(2, 3, 35, 0.08));
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(17,17,17, 0.08));
   background-color: var(--bg-popover, var(--bg-main, #ffffff));
   color: var(--text-primary, #111111);
   transform-origin: bottom left;

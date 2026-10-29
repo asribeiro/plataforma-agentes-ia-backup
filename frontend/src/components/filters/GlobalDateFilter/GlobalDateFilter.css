@@ -1,16 +1,16 @@
 .global-date-filter {
   --gdf-surface: #ffffff;
   --gdf-surface-muted: #fafafa;
-  --gdf-ink: #020323;
-  --gdf-ink-soft: rgba(2, 3, 35, 0.66);
-  --gdf-ink-muted: rgba(2, 3, 35, 0.52);
-  --gdf-border: rgba(2, 3, 35, 0.1);
-  --gdf-border-strong: rgba(2, 3, 35, 0.18);
-  --gdf-hover: rgba(2, 3, 35, 0.04);
+  --gdf-ink: #111111;
+  --gdf-ink-soft: rgba(17,17,17, 0.66);
+  --gdf-ink-muted: rgba(17,17,17, 0.52);
+  --gdf-border: rgba(17,17,17, 0.1);
+  --gdf-border-strong: rgba(17,17,17, 0.18);
+  --gdf-hover: rgba(17,17,17, 0.04);
   --gdf-signal: #0f766e;
   --gdf-signal-soft: rgba(15, 118, 110, 0.1);
   --gdf-danger: #b45309;
-  --gdf-focus: 0 0 0 3px rgba(2, 3, 35, 0.12);
+  --gdf-focus: 0 0 0 3px rgba(17,17,17, 0.12);
   position: relative;
   color-scheme: light;
   color: var(--gdf-ink);
@@ -123,7 +123,7 @@
   border: 1px solid var(--gdf-border);
   border-radius: 11px;
   background: var(--gdf-surface);
-  box-shadow: 0 14px 36px rgba(2, 3, 35, 0.14);
+  box-shadow: 0 14px 36px rgba(17,17,17, 0.14);
 }
 
 .global-date-filter__popover--start {

@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: var(--overlay-bg, rgba(2, 3, 35, 0.42));
+  background: var(--overlay-bg, rgba(17,17,17, 0.42));
 }
 
 .modal {
@@ -149,8 +149,8 @@
 
 .searchInput:focus,
 .select:focus {
-  border-color: var(--focus-border, rgba(2, 3, 35, 0.28));
-  box-shadow: var(--focus-ring, 0 0 0 3px rgba(2, 3, 35, 0.06));
+  border-color: var(--focus-border, rgba(17,17,17, 0.28));
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(17,17,17, 0.06));
 }
 
 .filterButton {
@@ -259,7 +259,7 @@
 }
 
 .taskCard:hover {
-  border-color: var(--border-hover, rgba(2, 3, 35, 0.16));
+  border-color: var(--border-hover, rgba(17,17,17, 0.16));
   box-shadow: var(--shadow-md, 0 4px 12px rgba(0, 0, 0, 0.05));
 }
 
@@ -485,7 +485,7 @@
 }
 
 .dotBrand {
-  background: var(--text-primary, #020323);
+  background: var(--text-primary, #111111);
 }
 
 .dotSuccess {

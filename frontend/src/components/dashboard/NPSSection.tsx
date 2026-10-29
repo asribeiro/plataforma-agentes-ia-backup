@@ -132,10 +132,10 @@ const NPSSection: React.FC<NPSSectionProps> = ({ startDate, endDate }) => {
                     formatter={(value, name) => [value, name]}
                     labelFormatter={() => ''}
                     contentStyle={{
-                      backgroundColor: isDark ? '#020323' : '#FFFFFF',
+                      backgroundColor: isDark ? '#111111' : '#FFFFFF',
                       border: `1px solid ${isDark ? '#4B5563' : '#E5E7EB'}`,
                       borderRadius: '8px',
-                      color: isDark ? '#f7f7f7' : '#020323'
+                      color: isDark ? '#f7f7f7' : '#111111'
                     }}
                   />
                 </PieChart>
@@ -190,10 +190,10 @@ const NPSSection: React.FC<NPSSectionProps> = ({ startDate, endDate }) => {
               <Tooltip
                 formatter={(value: any) => [`${value} respostas`, 'Quantidade']}
                 contentStyle={{
-                  backgroundColor: isDark ? '#020323' : '#FFFFFF',
+                  backgroundColor: isDark ? '#111111' : '#FFFFFF',
                   border: `1px solid ${isDark ? '#4B5563' : '#E5E7EB'}`,
                   borderRadius: '8px',
-                  color: isDark ? '#f7f7f7' : '#020323'
+                  color: isDark ? '#f7f7f7' : '#111111'
                 }}
               />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>

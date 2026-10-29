@@ -3,7 +3,7 @@ import type { ProjectionsResponse } from '../../../../services/api';
 import { MonoEmpty } from '../States/MonoStates';
 import { clampPercent, formatCurrency, formatNumber } from '../utils/format';
 
-const PALETTE = ['rgba(2,3,35,0.55)', '#0f766e', 'rgba(2,3,35,0.30)', 'rgba(2,3,35,0.18)', 'rgba(2,3,35,0.12)', '#6b7280'];
+const PALETTE = ['rgba(17,17,17,0.55)', '#0f766e', 'rgba(17,17,17,0.30)', 'rgba(17,17,17,0.18)', 'rgba(17,17,17,0.12)', '#6b7280'];
 
 interface MonoForecastProps {
   projectionsData: ProjectionsResponse | null;

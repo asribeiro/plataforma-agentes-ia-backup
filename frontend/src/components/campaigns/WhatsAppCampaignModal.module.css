@@ -5,8 +5,8 @@
   display: grid;
   place-items: center;
   padding: 20px;
-  background: var(--camp-overlay, rgba(2, 3, 35, 0.64));
-  color: var(--camp-ink, #020323);
+  background: var(--camp-overlay, rgba(17,17,17, 0.64));
+  color: var(--camp-ink, #111111);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   backdrop-filter: blur(4px);
 }
@@ -24,7 +24,7 @@
   border: 1px solid var(--camp-border);
   border-radius: 12px;
   background: var(--camp-surface);
-  box-shadow: 0 24px 70px rgba(2, 3, 35, 0.26);
+  box-shadow: 0 24px 70px rgba(17,17,17, 0.26);
 }
 
 .header {

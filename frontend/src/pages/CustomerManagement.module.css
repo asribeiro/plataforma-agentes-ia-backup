@@ -2,19 +2,19 @@
   --customer-canvas: #f7f7f7;
   --customer-surface: #ffffff;
   --customer-surface-muted: #fafafa;
-  --customer-ink: #020323;
-  --customer-ink-soft: rgba(2, 3, 35, 0.66);
-  --customer-ink-muted: rgba(2, 3, 35, 0.52);
-  --customer-border: rgba(2, 3, 35, 0.1);
-  --customer-border-strong: rgba(2, 3, 35, 0.18);
-  --customer-hover: rgba(2, 3, 35, 0.04);
+  --customer-ink: #111111;
+  --customer-ink-soft: rgba(17,17,17, 0.66);
+  --customer-ink-muted: rgba(17,17,17, 0.52);
+  --customer-border: rgba(17,17,17, 0.1);
+  --customer-border-strong: rgba(17,17,17, 0.18);
+  --customer-hover: rgba(17,17,17, 0.04);
   --customer-signal: #0f766e;
   --customer-signal-soft: rgba(15, 118, 110, 0.1);
   --customer-warning: #b45309;
   --customer-warning-soft: rgba(180, 83, 9, 0.09);
   --customer-danger: #dc2626;
   --customer-danger-soft: rgba(220, 38, 38, 0.08);
-  --customer-focus: 0 0 0 3px rgba(2, 3, 35, 0.12);
+  --customer-focus: 0 0 0 3px rgba(17,17,17, 0.12);
   min-height: 100vh;
   padding: 16px 20px calc(96px + env(safe-area-inset-bottom));
   background: var(--customer-canvas);
@@ -25,7 +25,7 @@
 }
 
 .dark {
-  --customer-canvas: #020323;
+  --customer-canvas: #111111;
   --customer-surface: #08091f;
   --customer-surface-muted: #0b0d24;
   --customer-ink: #f7f7f7;
@@ -157,7 +157,7 @@
   min-width: 0;
   border: 1px solid var(--customer-border);
   background: var(--customer-surface);
-  box-shadow: 0 1px 2px rgba(2, 3, 35, 0.025);
+  box-shadow: 0 1px 2px rgba(17,17,17, 0.025);
 }
 
 .toolbar {
@@ -709,7 +709,7 @@
   border: 1px solid var(--customer-border);
   border-radius: 11px;
   background: var(--customer-surface);
-  box-shadow: 0 1px 2px rgba(2, 3, 35, 0.025);
+  box-shadow: 0 1px 2px rgba(17,17,17, 0.025);
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -1154,7 +1154,7 @@
   border: 1px solid var(--customer-border);
   border-radius: 11px;
   background: var(--customer-surface);
-  box-shadow: 0 1px 2px rgba(2, 3, 35, 0.025);
+  box-shadow: 0 1px 2px rgba(17,17,17, 0.025);
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -2247,26 +2247,26 @@
 .modalBackdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 3, 35, 0.58);
+  background: rgba(17,17,17, 0.58);
   backdrop-filter: blur(5px);
 }
 
 .modalPanel {
   --customer-surface: #ffffff;
   --customer-surface-muted: #fafafa;
-  --customer-ink: #020323;
-  --customer-ink-soft: rgba(2, 3, 35, 0.66);
-  --customer-ink-muted: rgba(2, 3, 35, 0.52);
-  --customer-border: rgba(2, 3, 35, 0.1);
-  --customer-border-strong: rgba(2, 3, 35, 0.18);
-  --customer-hover: rgba(2, 3, 35, 0.04);
+  --customer-ink: #111111;
+  --customer-ink-soft: rgba(17,17,17, 0.66);
+  --customer-ink-muted: rgba(17,17,17, 0.52);
+  --customer-border: rgba(17,17,17, 0.1);
+  --customer-border-strong: rgba(17,17,17, 0.18);
+  --customer-hover: rgba(17,17,17, 0.04);
   --customer-signal: #0f766e;
   --customer-signal-soft: rgba(15, 118, 110, 0.1);
   --customer-warning: #b45309;
   --customer-warning-soft: rgba(180, 83, 9, 0.09);
   --customer-danger: #dc2626;
   --customer-danger-soft: rgba(220, 38, 38, 0.08);
-  --customer-focus: 0 0 0 3px rgba(2, 3, 35, 0.12);
+  --customer-focus: 0 0 0 3px rgba(17,17,17, 0.12);
   position: relative;
   z-index: 10000;
   width: min(100%, 660px);
@@ -2276,7 +2276,7 @@
   border-radius: 12px;
   background: var(--customer-surface);
   color: var(--customer-ink);
-  box-shadow: 0 24px 70px rgba(2, 3, 35, 0.28);
+  box-shadow: 0 24px 70px rgba(17,17,17, 0.28);
 }
 
 .modalPanel[data-theme="dark"] {
@@ -2706,7 +2706,7 @@
   border: 1px solid var(--customer-border);
   border-radius: 9px;
   background: var(--customer-surface);
-  box-shadow: 0 1px 2px rgba(2, 3, 35, 0.025);
+  box-shadow: 0 1px 2px rgba(17,17,17, 0.025);
 }
 
 .formSectionHeader {
@@ -2951,7 +2951,7 @@
 .saleStepActive {
   background: var(--customer-surface);
   color: var(--customer-ink);
-  box-shadow: inset 2px 0 0 var(--customer-ink), 0 1px 2px rgba(2, 3, 35, 0.04);
+  box-shadow: inset 2px 0 0 var(--customer-ink), 0 1px 2px rgba(17,17,17, 0.04);
 }
 
 .saleStepCompleted {
@@ -3076,7 +3076,7 @@
   border: 1px solid var(--customer-border);
   border-radius: 11px;
   background: var(--customer-surface);
-  box-shadow: 0 1px 2px rgba(2, 3, 35, 0.025);
+  box-shadow: 0 1px 2px rgba(17,17,17, 0.025);
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -3559,7 +3559,7 @@
   }
 
   .saleStepActive {
-    box-shadow: inset 0 -2px 0 var(--customer-ink), 0 1px 2px rgba(2, 3, 35, 0.04);
+    box-shadow: inset 0 -2px 0 var(--customer-ink), 0 1px 2px rgba(17,17,17, 0.04);
   }
 
   .saleFlowStage {

@@ -75,7 +75,7 @@
   border: 0;
   border-radius: 8px;
   background-color: var(--bg-card, var(--bg-main, #ffffff));
-  box-shadow: var(--shadow-sm, 0 1px 2px rgba(2, 3, 35, 0.05));
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(17,17,17, 0.05));
   color: var(--text-secondary, #71717a);
   cursor: pointer;
   transition:
@@ -405,7 +405,7 @@
 .navItem:focus-visible,
 .navSubitem:focus-visible,
 .logoContainer:focus-visible {
-  outline: 2px solid var(--focus-border, rgba(2, 3, 35, 0.28));
+  outline: 2px solid var(--focus-border, rgba(17,17,17, 0.28));
   outline-offset: 2px;
 }
 

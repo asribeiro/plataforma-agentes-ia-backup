@@ -646,7 +646,7 @@ const WebhookManager: React.FC = () => {
 
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand/60 p-4 backdrop-blur-sm">
-                    <div className={agentivePanelClass(isDark, 'w-full max-w-md p-6 shadow-[0_24px_70px_rgba(2,3,35,0.28)]')}>
+                    <div className={agentivePanelClass(isDark, 'w-full max-w-md p-6 shadow-[0_24px_70px_rgba(17,17,17,0.28)]')}>
                         <div className="mb-5 flex items-start gap-3">
                             <div className={`grid h-11 w-11 shrink-0 place-items-center rounded-xl ${isDark ? 'bg-white/10 text-white' : 'bg-brand text-white'}`}>
                                 <Webhook className="h-5 w-5" />

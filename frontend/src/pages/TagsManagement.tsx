@@ -40,7 +40,7 @@ import {
 import styles from './TagsManagement.module.css';
 
 const PRESET_COLORS = [
-    '#020323',
+    '#111111',
     '#10B981',
     '#F59E0B',
     '#EF4444',

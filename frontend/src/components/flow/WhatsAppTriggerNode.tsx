@@ -199,7 +199,7 @@ const WhatsAppTriggerNode = ({ data, id, selected }: NodeProps) => {
                 e.stopPropagation();
                 setMenuPosition({ x: e.clientX, y: e.clientY });
             }}
-            className={`shadow-[0_14px_34px_rgba(2,3,35,0.12)] rounded-2xl border min-w-[300px] max-w-[300px] transition-all duration-200 relative ${isDark ? 'bg-brand border-white/10' : 'bg-white border-brand/10'
+            className={`shadow-[0_14px_34px_rgba(17,17,17,0.12)] rounded-2xl border min-w-[300px] max-w-[300px] transition-all duration-200 relative ${isDark ? 'bg-brand border-white/10' : 'bg-white border-brand/10'
                 } ${selected ? 'ring-2 ring-green-500/50' : ''}`}
         >
             {/* Context Menu */}
