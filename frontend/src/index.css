@@ -10,23 +10,19 @@
 /*
   =========================================
   DEFAULT BRAND TOKENS
-  Official palette: #E11D24 (Vermelho), #111111 (Preto), #E5E7EB (Cinza Claro).
+  Official palette: #020323, #f7f7f7, #ffffff.
   Legacy variable names are kept so existing components inherit the new brand.
   =========================================
 */
 :root,
 :root[data-theme='light'] {
-  --brand-primary: #111111;
-  --brand-ink: #111111;
-  --brand-accent: #E11D24;
-  --brand-accent-hover: #C1151B;
-  --brand-accent-soft: rgba(225, 29, 36, 0.08);
-  --brand-gray: #E5E7EB;
+  --brand-primary: #020323;
+  --brand-ink: #020323;
   --brand-canvas: #f7f7f7;
   --brand-white: #ffffff;
   --brand-primary-hover: color-mix(in srgb, var(--brand-primary) 92%, var(--brand-white));
-  --brand-primary-soft: rgba(17,17,17, 0.08);
-  --brand-primary-softer: rgba(17,17,17, 0.04);
+  --brand-primary-soft: rgba(2, 3, 35, 0.08);
+  --brand-primary-softer: rgba(2, 3, 35, 0.04);
   --app-canvas: var(--brand-canvas);
   --bg-sidebar: #fbfbfc;
   --bg-main: var(--brand-white);
@@ -36,15 +32,15 @@
   --hover-bg: #f3f4f6;
   --active-bg: #f1f5f9;
   --glass-bg: rgba(251, 251, 252, 0.94);
-  --overlay-bg: rgba(17,17,17, 0.42);
+  --overlay-bg: rgba(2, 3, 35, 0.42);
 
   /* Primary Brand */
   --primary-50: var(--brand-canvas);
-  --primary-100: var(--brand-gray);
-  --primary-200: #d1d5db;
-  --primary-300: #9ca3af;
-  --primary-400: #6b7280;
-  --primary-500: #4b5563;
+  --primary-100: #ececf0;
+  --primary-200: #d7d7df;
+  --primary-300: #b7b8c8;
+  --primary-400: #85879e;
+  --primary-500: #4d506d;
   --primary-600: var(--brand-primary);
   --primary-700: var(--brand-primary);
   --primary-800: var(--brand-primary);
@@ -53,20 +49,20 @@
   /* Secondary and accent are neutral brand surfaces. */
   --secondary-50: var(--brand-white);
   --secondary-100: var(--brand-canvas);
-  --secondary-200: var(--brand-gray);
-  --secondary-300: #d1d5db;
-  --secondary-400: #9ca3af;
+  --secondary-200: #ececf0;
+  --secondary-300: #d7d7df;
+  --secondary-400: #b7b8c8;
   --secondary-500: var(--brand-canvas);
-  --secondary-600: #d1d5db;
-  --secondary-700: #6b7280;
-  --secondary-800: #4b5563;
+  --secondary-600: #d7d7df;
+  --secondary-700: #85879e;
+  --secondary-800: #4d506d;
   --secondary-900: var(--brand-primary);
 
   --accent-50: var(--brand-white);
   --accent-100: var(--brand-canvas);
-  --accent-200: var(--brand-gray);
-  --accent-300: #d1d5db;
-  --accent-400: #9ca3af;
+  --accent-200: #ececf0;
+  --accent-300: #d7d7df;
+  --accent-400: #b7b8c8;
   --accent-500: var(--brand-canvas);
   --accent-600: var(--brand-primary);
   --accent-700: var(--brand-primary);
@@ -76,13 +72,13 @@
   /* Neutral Scale */
   --neutral-50: var(--brand-white);
   --neutral-100: var(--brand-canvas);
-  --neutral-200: var(--brand-gray);
-  --neutral-300: #d1d5db;
-  --neutral-400: #9ca3af;
-  --neutral-500: #6b7280;
-  --neutral-600: #4b5563;
-  --neutral-700: #374151;
-  --neutral-800: #1f2937;
+  --neutral-200: #ececf0;
+  --neutral-300: #d7d7df;
+  --neutral-400: #b7b8c8;
+  --neutral-500: #85879e;
+  --neutral-600: #4d506d;
+  --neutral-700: #202443;
+  --neutral-800: #11142f;
   --neutral-900: var(--brand-primary);
 
   /* Semantic Colors - Mantidas por usabilidade */
@@ -90,11 +86,11 @@
   --success-light: #dcfce7;
   --warning: #f59e0b;
   --warning-light: #fef3c7;
-  --error: var(--brand-accent);
-  --error-light: #FDECEA;
+  --error: #ef4444;
+  --error-light: #fef2f2;
   --info: #3b82f6;
   --info-light: #dbeafe;
-  --accent-red: var(--brand-accent);
+  --accent-red: var(--error);
   --accent-green: var(--success);
   --accent-orange: #f97316;
   --accent-blue: var(--info);
@@ -107,38 +103,38 @@
   --surface-overlay: rgba(255, 255, 255, 0.95);
 
   /* Border Colors */
-  --border-default: var(--brand-gray);
+  --border-default: #ececf0;
   --border-light: var(--brand-canvas);
-  --border-medium: #d1d5db;
+  --border-medium: #d7d7df;
   --border-focus: var(--brand-primary);
-  --border-hover: #6b7280;
-  --card-border: var(--brand-gray);
+  --border-hover: #85879e;
+  --card-border: #ececf0;
   --border-color: #f0f0f0;
-  --focus-border: rgba(17,17,17, 0.28);
-  --focus-ring: 0 0 0 3px rgba(17,17,17, 0.06);
+  --focus-border: rgba(2, 3, 35, 0.28);
+  --focus-ring: 0 0 0 3px rgba(2, 3, 35, 0.06);
 
   /* Text Colors */
   --text-primary: var(--brand-primary);
-  --text-secondary: #4b5563;
-  --text-muted: #6b7280;
+  --text-secondary: #4d506d;
+  --text-muted: #85879e;
   --text-inverse: var(--brand-white);
 
   /* Modern Shadow System */
-  --shadow-sm: 0 1px 2px 0 rgba(17,17,17, 0.05);
-  --shadow-base: 0 1px 3px 0 rgba(17,17,17, 0.1), 0 1px 2px 0 rgba(17,17,17, 0.06);
-  --shadow-md: 0 4px 6px -1px rgba(17,17,17, 0.1), 0 2px 4px -1px rgba(17,17,17, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(17,17,17, 0.1), 0 4px 6px -2px rgba(17,17,17, 0.05);
-  --shadow-xl: 0 20px 25px -5px rgba(17,17,17, 0.1), 0 10px 10px -5px rgba(17,17,17, 0.04);
+  --shadow-sm: 0 1px 2px 0 rgba(2, 3, 35, 0.05);
+  --shadow-base: 0 1px 3px 0 rgba(2, 3, 35, 0.1), 0 1px 2px 0 rgba(2, 3, 35, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(2, 3, 35, 0.1), 0 2px 4px -1px rgba(2, 3, 35, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(2, 3, 35, 0.1), 0 4px 6px -2px rgba(2, 3, 35, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(2, 3, 35, 0.1), 0 10px 10px -5px rgba(2, 3, 35, 0.04);
   --shadow-2xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  --shadow-flat: 0 1px 2px rgba(17,17,17, 0.06);
-  --shadow-flat-md: 0 8px 24px rgba(17,17,17, 0.08);
-  --shadow-flat-lg: 0 16px 40px rgba(17,17,17, 0.1);
-  --shadow-color-primary: 0 4px 14px 0 rgba(17,17,17, 0.15);
-  --shadow-color-secondary: 0 4px 14px 0 rgba(17,17,17, 0.08);
-  --shadow-card: 0 8px 30px rgba(17,17,17, 0.04);
+  --shadow-flat: 0 1px 2px rgba(2, 3, 35, 0.06);
+  --shadow-flat-md: 0 8px 24px rgba(2, 3, 35, 0.08);
+  --shadow-flat-lg: 0 16px 40px rgba(2, 3, 35, 0.1);
+  --shadow-color-primary: 0 4px 14px 0 rgba(2, 3, 35, 0.15);
+  --shadow-color-secondary: 0 4px 14px 0 rgba(2, 3, 35, 0.08);
+  --shadow-card: 0 8px 30px rgba(2, 3, 35, 0.04);
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, var(--brand-primary) 0%, #2a2a2a 100%);
+  --gradient-primary: linear-gradient(135deg, var(--brand-primary) 0%, #11142f 100%);
   --gradient-secondary: linear-gradient(135deg, var(--brand-white) 0%, var(--brand-canvas) 100%);
   --gradient-accent: linear-gradient(135deg, var(--brand-canvas) 0%, var(--brand-white) 100%);
   --gradient-surface: linear-gradient(135deg, var(--brand-canvas) 0%, var(--brand-white) 100%);
@@ -162,21 +158,21 @@
 /* Dark Theme Variables */
 :root[data-theme='dark'],
 .dark {
-  --app-canvas: #0a0a0a;
-  --bg-sidebar: #0d0d0d;
-  --bg-main: #0f0f0f;
-  --bg-card: #141414;
-  --bg-popover: #141414;
-  --bg-input: #0f0f0f;
+  --app-canvas: #020323;
+  --bg-sidebar: #050619;
+  --bg-main: #08091f;
+  --bg-card: #0b0d24;
+  --bg-popover: #0b0d24;
+  --bg-input: #08091f;
   --hover-bg: rgba(255, 255, 255, 0.07);
   --active-bg: rgba(255, 255, 255, 0.1);
-  --glass-bg: rgba(15, 15, 15, 0.92);
+  --glass-bg: rgba(8, 9, 31, 0.92);
   --overlay-bg: rgba(0, 0, 0, 0.56);
 
   --surface-primary: var(--bg-card);
   --surface-secondary: var(--app-canvas);
   --surface-tertiary: var(--hover-bg);
-  --surface-overlay: rgba(17,17,17, 0.95);
+  --surface-overlay: rgba(2, 3, 35, 0.95);
 
   --border-default: rgba(255, 255, 255, 0.12);
   --border-light: rgba(255, 255, 255, 0.08);
@@ -197,8 +193,8 @@
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.28);
   --shadow-card: 0 18px 46px rgba(0, 0, 0, 0.34);
 
-  --gradient-surface: linear-gradient(135deg, var(--brand-primary) 0%, #2a2a2a 100%);
-  --gradient-header: linear-gradient(180deg, #2a2a2a 0%, var(--brand-primary) 100%);
+  --gradient-surface: linear-gradient(135deg, var(--brand-primary) 0%, #11142f 100%);
+  --gradient-header: linear-gradient(180deg, #11142f 0%, var(--brand-primary) 100%);
 }
 
 /* Base styles para Flat Design */
@@ -294,7 +290,7 @@ code {
 
 .flat-input:focus {
   border-color: var(--border-focus);
-  box-shadow: var(--focus-ring, 0 0 0 3px rgba(17,17,17, 0.1));
+  box-shadow: var(--focus-ring, 0 0 0 3px rgba(2, 3, 35, 0.1));
 }
 
 .flat-input.error {

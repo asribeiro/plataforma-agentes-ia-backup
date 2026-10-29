@@ -580,7 +580,7 @@ const TagFilterNode = ({ data, id, selected, isConnectable }: NodeProps) => {
                                                 <div className="flex items-center gap-2">
                                                     <span
                                                         className="h-2.5 w-2.5 shrink-0 rounded-full border border-white/40"
-                                                        style={{ backgroundColor: selectedTag.color || '#111111' }}
+                                                        style={{ backgroundColor: selectedTag.color || '#020323' }}
                                                     />
                                                     <span className="truncate">{selectedTag.name}</span>
                                                 </div>

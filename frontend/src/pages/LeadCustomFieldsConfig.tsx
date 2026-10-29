@@ -865,7 +865,7 @@ const LeadCustomFieldsConfig: React.FC = () => {
               }}
               aria-label="Fechar modal"
             />
-            <div className={agentivePanelClass(isDark, 'relative z-[10000] flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden shadow-[0_24px_70px_rgba(17,17,17,0.28)]')}>
+            <div className={agentivePanelClass(isDark, 'relative z-[10000] flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden shadow-[0_24px_70px_rgba(2,3,35,0.28)]')}>
               <div className={cx('flex items-start justify-between gap-4 border-b p-5', isDark ? 'border-white/10' : 'border-brand/10')}>
                 <div className="flex min-w-0 items-start gap-3">
                   <span className={cx('grid h-11 w-11 shrink-0 place-items-center rounded-xl', isDark ? 'bg-white/10 text-white' : 'bg-brand text-white')}>

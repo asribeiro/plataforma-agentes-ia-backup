@@ -435,11 +435,11 @@ const Dashboard: React.FC = () => {
       const conversionRate = stats.totalLeads > 0 ? (stats.totalVendas / stats.totalLeads) * 100 : 0;
 
       shareElement.innerHTML = `
-        <div style="width:540px;height:960px;background:#f7f7f7;color:#111111;padding:34px;box-sizing:border-box;">
-          <div style="height:100%;border:1px solid rgba(17,17,17,.1);border-radius:10px;background:#fff;overflow:hidden;box-shadow:0 10px 30px rgba(17,17,17,.08);">
-            <div style="padding:28px;border-bottom:1px solid rgba(17,17,17,.1);background:#111111;color:#fff;">
+        <div style="width:540px;height:960px;background:#f7f7f7;color:#020323;padding:34px;box-sizing:border-box;">
+          <div style="height:100%;border:1px solid rgba(2,3,35,.1);border-radius:10px;background:#fff;overflow:hidden;box-shadow:0 10px 30px rgba(2,3,35,.08);">
+            <div style="padding:28px;border-bottom:1px solid rgba(2,3,35,.1);background:#020323;color:#fff;">
               <div style="display:flex;align-items:center;gap:14px;margin-bottom:38px;">
-                ${safeLogo ? `<img src="${safeLogo}" style="width:46px;height:46px;border-radius:8px;object-fit:cover;background:#fff;" />` : `<div style="width:46px;height:46px;border-radius:8px;background:#fff;color:#111111;display:grid;place-items:center;font-weight:700;">AI</div>`}
+                ${safeLogo ? `<img src="${safeLogo}" style="width:46px;height:46px;border-radius:8px;object-fit:cover;background:#fff;" />` : `<div style="width:46px;height:46px;border-radius:8px;background:#fff;color:#020323;display:grid;place-items:center;font-weight:700;">AI</div>`}
                 <div>
                   <div style="font-size:15px;font-weight:700;line-height:1.2;">${safeCompanyName}</div>
                   <div style="font-size:11px;color:rgba(255,255,255,.62);margin-top:4px;">Criado com ${safeAppName}</div>
@@ -451,26 +451,26 @@ const Dashboard: React.FC = () => {
             </div>
             <div style="padding:26px;display:grid;gap:16px;">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
-                <div style="border:1px solid rgba(17,17,17,.1);border-radius:8px;padding:18px;">
-                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:rgba(17,17,17,.48);font-weight:700;">Leads</div>
+                <div style="border:1px solid rgba(2,3,35,.1);border-radius:8px;padding:18px;">
+                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:rgba(2,3,35,.48);font-weight:700;">Leads</div>
                   <div style="font-size:32px;font-weight:500;margin-top:10px;">${stats.totalLeads.toLocaleString('pt-BR')}</div>
                 </div>
-                <div style="border:1px solid rgba(17,17,17,.1);border-radius:8px;padding:18px;">
-                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:rgba(17,17,17,.48);font-weight:700;">Vendas</div>
+                <div style="border:1px solid rgba(2,3,35,.1);border-radius:8px;padding:18px;">
+                  <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:rgba(2,3,35,.48);font-weight:700;">Vendas</div>
                   <div style="font-size:32px;font-weight:500;margin-top:10px;">${stats.totalVendas.toLocaleString('pt-BR')}</div>
                 </div>
               </div>
-              <div style="border:1px solid rgba(17,17,17,.1);border-radius:8px;padding:18px;">
-                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:rgba(17,17,17,.48);font-weight:700;">Conversão</div>
+              <div style="border:1px solid rgba(2,3,35,.1);border-radius:8px;padding:18px;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:rgba(2,3,35,.48);font-weight:700;">Conversão</div>
                 <div style="font-size:34px;font-weight:500;margin-top:10px;color:#0f766e;">${conversionRate.toFixed(1)}%</div>
-                <div style="height:8px;border-radius:999px;background:rgba(17,17,17,.08);overflow:hidden;margin-top:16px;">
+                <div style="height:8px;border-radius:999px;background:rgba(2,3,35,.08);overflow:hidden;margin-top:16px;">
                   <div style="height:100%;width:${Math.min(conversionRate, 100)}%;background:#0f766e;border-radius:999px;"></div>
                 </div>
               </div>
               <div style="display:grid;gap:10px;margin-top:6px;">
                 ${stageRowsForShare(stats, stages, stageMetrics, stageReachMetrics).slice(0, 5).map((stage) => `
-                  <div style="display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(17,17,17,.08);padding-bottom:10px;">
-                    <span style="font-size:13px;color:rgba(17,17,17,.68);">${escapeHtml(stage.name)}</span>
+                  <div style="display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(2,3,35,.08);padding-bottom:10px;">
+                    <span style="font-size:13px;color:rgba(2,3,35,.68);">${escapeHtml(stage.name)}</span>
                     <strong style="font-size:13px;">${stage.count.toLocaleString('pt-BR')}</strong>
                   </div>
                 `).join('')}

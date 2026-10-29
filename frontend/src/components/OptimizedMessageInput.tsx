@@ -180,7 +180,7 @@ export const OptimizedMessageInput: React.FC<OptimizedMessageInputProps> = ({
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-brand/45 p-3 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-sm" onClick={closeActionMenu}>
           <div
             className={cx(
-              'w-full max-w-md rounded-[24px] border p-3 shadow-[0_24px_70px_rgba(17,17,17,0.25)]',
+              'w-full max-w-md rounded-[24px] border p-3 shadow-[0_24px_70px_rgba(2,3,35,0.25)]',
               isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
             )}
             onClick={(event) => event.stopPropagation()}
@@ -252,7 +252,7 @@ export const OptimizedMessageInput: React.FC<OptimizedMessageInputProps> = ({
 
       {/* Popup Picker de Emojis */}
       {showEmojiPicker && (
-        <div className={cx(isMenuMode ? 'fixed inset-x-3 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-[80] mx-auto max-w-md rounded-2xl border p-3 shadow-[0_18px_45px_rgba(17,17,17,0.18)]' : 'absolute bottom-full left-3 z-50 mb-2 rounded-2xl border p-3 shadow-[0_18px_45px_rgba(17,17,17,0.18)]', isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand')}>
+        <div className={cx(isMenuMode ? 'fixed inset-x-3 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-[80] mx-auto max-w-md rounded-2xl border p-3 shadow-[0_18px_45px_rgba(2,3,35,0.18)]' : 'absolute bottom-full left-3 z-50 mb-2 rounded-2xl border p-3 shadow-[0_18px_45px_rgba(2,3,35,0.18)]', isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand')}>
           <div className="grid grid-cols-6 gap-2">
             {EMOJIS_POPULARES.map(emoji => (
               <button

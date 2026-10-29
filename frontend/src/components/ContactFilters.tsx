@@ -159,7 +159,7 @@ export const ContactFilters: React.FC<ContactFiltersProps> = ({ onFiltersChange,
         </button>
 
         {showFunnelDropdown && (
-          <div className={agentivePanelClass(isDark, 'absolute left-0 top-full z-50 mt-2 w-72 p-2 shadow-[0_22px_55px_rgba(17,17,17,0.18)]')}>
+          <div className={agentivePanelClass(isDark, 'absolute left-0 top-full z-50 mt-2 w-72 p-2 shadow-[0_22px_55px_rgba(2,3,35,0.18)]')}>
             <div className={cx('px-2 py-1 text-[10px] font-semibold uppercase', isDark ? 'text-white/40' : 'text-brand/40')}>
               Contato e etapas do CRM
             </div>

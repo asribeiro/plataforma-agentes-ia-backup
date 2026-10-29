@@ -17,7 +17,6 @@ from backend.auth import get_current_user
 from backend.models import Message
 from backend.runtime_settings import (
     ACCOUNT_PROFILE_PHOTO_DIR,
-    COMPANY_LOGO_DIR,
     MEDIA_BASE_PATH as RUNTIME_MEDIA_BASE_PATH,
 )
 
@@ -34,39 +33,6 @@ ACCOUNT_PROFILE_PHOTO_TYPES = {
     ".png": "image/png",
     ".webp": "image/webp",
 }
-COMPANY_LOGO_TYPES = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".webp": "image/webp",
-    ".gif": "image/gif",
-}
-
-
-@media_router.get("/media/logos/{filename}")
-async def get_company_logo(filename: str):
-    """
-    Serve logos de empresas salvos localmente (upload em Configurações da empresa).
-    """
-    extension = Path(filename).suffix.lower()
-    if os.path.basename(filename) != filename or extension not in COMPANY_LOGO_TYPES:
-        raise HTTPException(status_code=400, detail="Arquivo de logo inválido")
-
-    logo_dir = Path(str(COMPANY_LOGO_DIR))
-    safe_base = logo_dir.resolve()
-    safe_path = (logo_dir / filename).resolve()
-
-    if not str(safe_path).startswith(f"{safe_base}{os.sep}"):
-        raise HTTPException(status_code=403, detail="Acesso negado")
-
-    if not safe_path.exists() or not safe_path.is_file():
-        raise HTTPException(status_code=404, detail="Logo não encontrado")
-
-    return FileResponse(
-        str(safe_path),
-        media_type=COMPANY_LOGO_TYPES[extension],
-        headers={"Cache-Control": "public, max-age=604800"},
-    )
 
 
 @media_router.get("/media/account-profiles/{filename}")

@@ -78,10 +78,10 @@ export const flowNodeShellClass = (
     const toneClasses = toneClassMap[tone];
 
     return [
-        'relative overflow-hidden rounded-[20px] border shadow-[0_18px_45px_rgba(17,17,17,0.16)] transition-all duration-200',
+        'relative overflow-hidden rounded-[20px] border shadow-[0_18px_45px_rgba(2,3,35,0.16)] transition-all duration-200',
         className,
         isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand',
-        selected ? `ring-2 ${toneClasses.ring}` : 'hover:shadow-[0_22px_55px_rgba(17,17,17,0.2)]',
+        selected ? `ring-2 ${toneClasses.ring}` : 'hover:shadow-[0_22px_55px_rgba(2,3,35,0.2)]',
     ].join(' ');
 };
 

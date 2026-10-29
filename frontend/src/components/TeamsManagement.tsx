@@ -352,7 +352,7 @@ const TeamsManagement: React.FC<TeamsManagementProps> = ({ onTeamsChanged }) => 
                     isSelected
                       ? isDark
                         ? 'border-white bg-white text-brand shadow-[0_16px_32px_rgba(255,255,255,0.08)]'
-                        : 'border-brand bg-brand text-white shadow-[0_16px_32px_rgba(17,17,17,0.12)]'
+                        : 'border-brand bg-brand text-white shadow-[0_16px_32px_rgba(2,3,35,0.12)]'
                       : isDark
                         ? 'border-white/10 bg-white/[0.04] text-white/75 hover:bg-white/10 hover:text-white'
                         : 'border-brand/10 bg-white text-brand/75 hover:bg-brand-canvas hover:text-brand'
@@ -462,7 +462,7 @@ const TeamsManagement: React.FC<TeamsManagementProps> = ({ onTeamsChanged }) => 
                         checked
                           ? isDark
                             ? 'border-white/25 bg-white/[0.08] text-white'
-                            : 'border-brand/20 bg-white text-brand shadow-[0_14px_35px_rgba(17,17,17,0.08)]'
+                            : 'border-brand/20 bg-white text-brand shadow-[0_14px_35px_rgba(2,3,35,0.08)]'
                           : isDark
                             ? 'border-white/10 bg-white/[0.03] text-white/75 hover:bg-white/[0.06]'
                             : 'border-brand/10 bg-brand-canvas text-brand/70 hover:bg-white'

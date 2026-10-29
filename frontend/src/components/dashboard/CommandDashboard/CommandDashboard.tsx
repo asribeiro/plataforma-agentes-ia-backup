@@ -397,10 +397,10 @@ const TimeSeriesPanel: React.FC<TimeSeriesPanelProps> = ({ dailyFunnelData, isDa
 
   const tooltipStyle: React.CSSProperties = {
     backgroundColor: isDark ? '#08092f' : '#ffffff',
-    border: `1px solid ${isDark ? 'rgba(255,255,255,0.14)' : 'rgba(17,17,17,0.12)'}`,
+    border: `1px solid ${isDark ? 'rgba(255,255,255,0.14)' : 'rgba(2,3,35,0.12)'}`,
     borderRadius: 12,
-    boxShadow: '0 18px 52px rgba(17,17,17,0.16)',
-    color: isDark ? '#f7f7f7' : '#111111',
+    boxShadow: '0 18px 52px rgba(2,3,35,0.16)',
+    color: isDark ? '#f7f7f7' : '#020323',
     fontSize: 12,
   };
 
@@ -419,19 +419,19 @@ const TimeSeriesPanel: React.FC<TimeSeriesPanelProps> = ({ dailyFunnelData, isDa
             <ResponsiveContainer height="100%" width="100%">
               <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 10, top: 8 }}>
                 <CartesianGrid
-                  stroke={isDark ? 'rgba(255,255,255,0.10)' : 'rgba(17,17,17,0.10)'}
+                  stroke={isDark ? 'rgba(255,255,255,0.10)' : 'rgba(2,3,35,0.10)'}
                   strokeDasharray="3 3"
                   vertical={false}
                 />
                 <XAxis
                   axisLine={false}
                   dataKey="displayDate"
-                  tick={{ fill: isDark ? 'rgba(247,247,247,0.50)' : 'rgba(17,17,17,0.48)', fontSize: 12 }}
+                  tick={{ fill: isDark ? 'rgba(247,247,247,0.50)' : 'rgba(2,3,35,0.48)', fontSize: 12 }}
                   tickLine={false}
                 />
                 <YAxis
                   axisLine={false}
-                  tick={{ fill: isDark ? 'rgba(247,247,247,0.50)' : 'rgba(17,17,17,0.48)', fontSize: 12 }}
+                  tick={{ fill: isDark ? 'rgba(247,247,247,0.50)' : 'rgba(2,3,35,0.48)', fontSize: 12 }}
                   tickLine={false}
                   width={34}
                 />
@@ -440,7 +440,7 @@ const TimeSeriesPanel: React.FC<TimeSeriesPanelProps> = ({ dailyFunnelData, isDa
                   dataKey="leads"
                   dot={false}
                   name="Leads"
-                  stroke={isDark ? '#f7f7f7' : '#111111'}
+                  stroke={isDark ? '#f7f7f7' : '#020323'}
                   strokeWidth={2.5}
                   type="monotone"
                 />

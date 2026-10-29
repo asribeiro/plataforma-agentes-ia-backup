@@ -262,7 +262,7 @@ const MetricTile: React.FC<MetricTileProps> = ({ helper, icon: Icon, label, valu
 
 const ModalShell: React.FC<ModalShellProps> = ({ children, description, isDark, onClose, title }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand/60 p-4 backdrop-blur-sm">
-    <div className={agentivePanelClass(isDark, 'relative max-h-[92vh] w-full max-w-lg overflow-y-auto p-5 shadow-[0_24px_70px_rgba(17,17,17,0.28)]')}>
+    <div className={agentivePanelClass(isDark, 'relative max-h-[92vh] w-full max-w-lg overflow-y-auto p-5 shadow-[0_24px_70px_rgba(2,3,35,0.28)]')}>
       <div className="mb-5 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h3 className="text-lg font-semibold leading-tight">{title}</h3>
@@ -846,7 +846,7 @@ const ContactsList: React.FC = () => {
     const isOpen = dropdownOpen === contact.id;
     const menu = isOpen && dropdownPosition && typeof document !== 'undefined' ? createPortal(
       <div
-        className={agentivePanelClass(isDark, 'w-52 p-2 shadow-[0_22px_55px_rgba(17,17,17,0.18)]')}
+        className={agentivePanelClass(isDark, 'w-52 p-2 shadow-[0_22px_55px_rgba(2,3,35,0.18)]')}
         data-dropdown
         style={{
           left: dropdownPosition.left,
@@ -1667,7 +1667,7 @@ const ContactsList: React.FC = () => {
                 </button>
 
                 {tagDropdownOpen && (
-                  <div className={agentivePanelClass(isDark, 'absolute left-0 top-full z-50 mt-2 max-h-56 w-56 overflow-y-auto p-1 shadow-[0_22px_55px_rgba(17,17,17,0.18)]')}>
+                  <div className={agentivePanelClass(isDark, 'absolute left-0 top-full z-50 mt-2 max-h-56 w-56 overflow-y-auto p-1 shadow-[0_22px_55px_rgba(2,3,35,0.18)]')}>
                     {allTags.filter(tag => !contactToConvert.tags?.some(contactTag => contactTag.id === tag.id)).length > 0 ? (
                       allTags
                         .filter(tag => !contactToConvert.tags?.some(contactTag => contactTag.id === tag.id))

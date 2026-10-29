@@ -130,7 +130,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
 
             {/* Variables Dropdown */}
             {showVariables && (
-                <div className={`absolute left-0 right-0 top-full mt-1 z-50 max-h-[200px] overflow-y-auto rounded-2xl border shadow-[0_18px_45px_rgba(17,17,17,0.16)] custom-scrollbar animation-fade-in ${isDark ? 'bg-brand border-white/10' : 'bg-white border-brand/10'
+                <div className={`absolute left-0 right-0 top-full mt-1 z-50 max-h-[200px] overflow-y-auto rounded-2xl border shadow-[0_18px_45px_rgba(2,3,35,0.16)] custom-scrollbar animation-fade-in ${isDark ? 'bg-brand border-white/10' : 'bg-white border-brand/10'
                     }`}>
                     {variables.length === 0 ? (
                         <div className="p-3 text-center text-xs text-gray-500">

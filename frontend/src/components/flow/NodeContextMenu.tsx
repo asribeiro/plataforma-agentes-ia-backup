@@ -69,7 +69,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({ x, y, onClose,
             onContextMenu={(event) => event.preventDefault()}
             onMouseDown={(event) => event.stopPropagation()}
             style={{ top: position.top, left: position.left, position: 'fixed', zIndex: 2147483647 }}
-            className={`min-w-[176px] overflow-hidden rounded-2xl border p-1 shadow-[0_18px_45px_rgba(17,17,17,0.16)] animation-fade-in ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
+            className={`min-w-[176px] overflow-hidden rounded-2xl border p-1 shadow-[0_18px_45px_rgba(2,3,35,0.16)] animation-fade-in ${isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
                 }`}
         >
             <div className="flex flex-col gap-1">

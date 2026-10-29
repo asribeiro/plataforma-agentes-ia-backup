@@ -82,7 +82,7 @@ export default function ChatContactProfile({
       <div className="absolute inset-0 bg-brand/55 backdrop-blur-sm" onClick={onClose} />
 
       <section className={cx(
-        'relative z-10 flex h-full w-full max-w-6xl flex-col overflow-hidden border shadow-[0_24px_80px_rgba(17,17,17,0.28)] sm:rounded-2xl',
+        'relative z-10 flex h-full w-full max-w-6xl flex-col overflow-hidden border shadow-[0_24px_80px_rgba(2,3,35,0.28)] sm:rounded-2xl',
         isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-brand-canvas text-brand'
       )}>
         <header className={cx('shrink-0 border-b p-4 sm:p-5', isDark ? 'border-white/10 bg-white/[0.035]' : 'border-brand/10 bg-white')}>

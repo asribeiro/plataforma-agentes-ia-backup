@@ -301,7 +301,7 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
 
         if (timeLabels.length === 0) {
             return (
-                <div className="flex min-h-[360px] w-full items-center justify-center rounded-2xl border border-dashed border-brand/15 bg-white p-8 text-center shadow-[0_22px_55px_rgba(17,17,17,0.08)]">
+                <div className="flex min-h-[360px] w-full items-center justify-center rounded-2xl border border-dashed border-brand/15 bg-white p-8 text-center shadow-[0_22px_55px_rgba(2,3,35,0.08)]">
                     <div className="max-w-md">
                         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-canvas text-brand/45">
                             <Clock3 className="h-6 w-6" />
@@ -316,7 +316,7 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
         }
 
         return (
-            <div className="flex h-[620px] w-full flex-col overflow-auto rounded-2xl border border-brand/10 bg-white shadow-[0_22px_55px_rgba(17,17,17,0.08)]">
+            <div className="flex h-[620px] w-full flex-col overflow-auto rounded-2xl border border-brand/10 bg-white shadow-[0_22px_55px_rgba(2,3,35,0.08)]">
                 {/* Header */}
                 <div className="sticky top-0 z-10 flex border-b border-brand/10 bg-white">
                     <div className="w-16 flex-shrink-0 border-r border-brand/10 bg-brand-canvas"></div>
@@ -402,7 +402,7 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                             appointment
                                                 ? 'cursor-default'
                                                 : isPastSlot
-                                                    ? 'cursor-not-allowed bg-[repeating-linear-gradient(135deg,rgba(17,17,17,0.035)_0,rgba(17,17,17,0.035)_8px,transparent_8px,transparent_16px)]'
+                                                    ? 'cursor-not-allowed bg-[repeating-linear-gradient(135deg,rgba(2,3,35,0.035)_0,rgba(2,3,35,0.035)_8px,transparent_8px,transparent_16px)]'
                                                     : !isConfiguredSlot
                                                         ? 'cursor-not-allowed bg-brand-canvas/35'
                                                         : 'cursor-pointer hover:bg-brand-canvas'
@@ -435,7 +435,7 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
     return (
         <div className="w-full space-y-4 text-brand">
             {/* Toolbar */}
-            <div className="w-full rounded-2xl border border-brand/10 bg-white p-4 shadow-[0_22px_55px_rgba(17,17,17,0.08)]">
+            <div className="w-full rounded-2xl border border-brand/10 bg-white p-4 shadow-[0_22px_55px_rgba(2,3,35,0.08)]">
                 <div className="grid gap-3 xl:grid-cols-[minmax(220px,280px)_minmax(0,1fr)_auto] xl:items-center">
                     <select
                         className="min-h-[42px] w-full rounded-xl border border-brand/10 bg-white px-3 py-2 text-sm font-semibold text-brand outline-none transition-all focus:border-brand/30 focus:ring-2 focus:ring-brand/10"

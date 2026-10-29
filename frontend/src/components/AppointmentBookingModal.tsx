@@ -261,7 +261,7 @@ export default function AppointmentBookingModal({
       <section
         className={cx(
           'relative z-[10020] flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden border',
-          isModern ? 'crm-modern-modal' : 'rounded-2xl shadow-[0_24px_80px_rgba(17,17,17,0.28)]',
+          isModern ? 'crm-modern-modal' : 'rounded-2xl shadow-[0_24px_80px_rgba(2,3,35,0.28)]',
           !isModern && (isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand')
         )}
       >

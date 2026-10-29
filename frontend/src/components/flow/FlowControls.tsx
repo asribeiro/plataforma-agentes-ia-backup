@@ -30,7 +30,7 @@ export const FlowControls: React.FC<FlowControlsProps> = ({
 
     return (
         <div
-            className={`absolute bottom-5 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border p-2 shadow-[0_18px_45px_rgba(17,17,17,0.16)] backdrop-blur ${
+            className={`absolute bottom-5 left-1/2 z-50 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-2xl border p-2 shadow-[0_18px_45px_rgba(2,3,35,0.16)] backdrop-blur ${
                 isDark ? 'border-white/10 bg-brand/90 text-white' : 'border-brand/10 bg-white/95 text-brand'
             }`}
         >

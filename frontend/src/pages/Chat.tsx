@@ -2451,7 +2451,7 @@ const ChatPage5: React.FC = () => {
         {showNewChatModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand/55 p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div
-              className={cx('relative mx-auto w-full max-w-md overflow-hidden rounded-2xl border shadow-[0_24px_70px_rgba(17,17,17,0.28)] transition-all duration-300 ease-in-out animate-in slide-in-from-bottom-4', isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand')}
+              className={cx('relative mx-auto w-full max-w-md overflow-hidden rounded-2xl border shadow-[0_24px_70px_rgba(2,3,35,0.28)] transition-all duration-300 ease-in-out animate-in slide-in-from-bottom-4', isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand')}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Cabeçalho do modal */}

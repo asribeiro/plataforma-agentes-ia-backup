@@ -32,18 +32,18 @@ export const monoChartPalette = (isDark: boolean): MonoPalette =>
         tooltipText: '#f7f7f7',
       }
     : {
-        c0: '#111111',
-        c1: 'rgba(17,17,17,0.55)',
-        c2: 'rgba(17,17,17,0.30)',
+        c0: '#020323',
+        c1: 'rgba(2,3,35,0.55)',
+        c2: 'rgba(2,3,35,0.30)',
         c3: '#0f766e',
-        c4: 'rgba(17,17,17,0.18)',
-        c5: 'rgba(17,17,17,0.12)',
+        c4: 'rgba(2,3,35,0.18)',
+        c5: 'rgba(2,3,35,0.12)',
         c6: '#6b7280',
-        grid: 'rgba(17,17,17,0.06)',
-        axis: 'rgba(17,17,17,0.55)',
+        grid: 'rgba(2,3,35,0.06)',
+        axis: 'rgba(2,3,35,0.55)',
         tooltipBg: '#ffffff',
-        tooltipBorder: 'rgba(17,17,17,0.12)',
-        tooltipText: '#111111',
+        tooltipBorder: 'rgba(2,3,35,0.12)',
+        tooltipText: '#020323',
       };
 
 const COLOR_BY_INDEX: Record<number, keyof MonoPalette> = {

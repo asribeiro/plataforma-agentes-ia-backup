@@ -155,7 +155,7 @@ const Dialog: React.FC<DialogProps> = ({
         onClick={onClose}
       />
       <div
-        className={`relative z-[10000] flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-[0_24px_70px_rgba(17,17,17,0.28)] ${
+        className={`relative z-[10000] flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border shadow-[0_24px_70px_rgba(2,3,35,0.28)] ${
           isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
         }`}
       >
@@ -259,7 +259,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({ trigger, children }) => {
             onClick={() => setIsOpen(false)}
           />
           <div
-            className={`fixed z-[9998] w-56 rounded-2xl border p-1.5 shadow-[0_22px_55px_rgba(17,17,17,0.18)] ${
+            className={`fixed z-[9998] w-56 rounded-2xl border p-1.5 shadow-[0_22px_55px_rgba(2,3,35,0.18)] ${
               isDark ? 'border-white/10 bg-brand text-white' : 'border-brand/10 bg-white text-brand'
             }`}
             style={{ top: `${position.top}px`, left: `${position.left}px` }}
@@ -770,7 +770,7 @@ const CompanyConfig: React.FC = () => {
                   isActive
                     ? isDark
                       ? 'border-white bg-white text-brand shadow-[0_10px_24px_rgba(255,255,255,0.08)]'
-                      : 'border-brand bg-brand text-white shadow-[0_10px_24px_rgba(17,17,17,0.12)]'
+                      : 'border-brand bg-brand text-white shadow-[0_10px_24px_rgba(2,3,35,0.12)]'
                     : isDark
                       ? 'border-transparent text-white/55 hover:border-white/10 hover:bg-white/[0.06] hover:text-white'
                       : 'border-transparent text-brand/55 hover:border-brand/10 hover:bg-brand-canvas hover:text-brand'

@@ -2,16 +2,16 @@
   --modern-canvas: #f7f7f7;
   --modern-surface: #ffffff;
   --modern-surface-muted: #fafafa;
-  --modern-ink: #111111;
-  --modern-ink-soft: rgba(17,17,17, 0.66);
-  --modern-ink-muted: rgba(17,17,17, 0.52);
-  --modern-border: rgba(17,17,17, 0.10);
-  --modern-border-strong: rgba(17,17,17, 0.18);
-  --modern-hover: rgba(17,17,17, 0.04);
+  --modern-ink: #020323;
+  --modern-ink-soft: rgba(2, 3, 35, 0.66);
+  --modern-ink-muted: rgba(2, 3, 35, 0.52);
+  --modern-border: rgba(2, 3, 35, 0.10);
+  --modern-border-strong: rgba(2, 3, 35, 0.18);
+  --modern-hover: rgba(2, 3, 35, 0.04);
   --modern-signal: #0f766e;
   --modern-signal-soft: rgba(15, 118, 110, 0.10);
   --modern-danger: #dc2626;
-  --modern-focus: 0 0 0 3px rgba(17,17,17, 0.12);
+  --modern-focus: 0 0 0 3px rgba(2, 3, 35, 0.12);
   min-height: 100vh;
   padding: 16px 20px calc(96px + env(safe-area-inset-bottom));
   background: var(--modern-canvas);
@@ -22,7 +22,7 @@
 }
 
 .modern-dashboard--dark {
-  --modern-canvas: #111111;
+  --modern-canvas: #020323;
   --modern-surface: #08091f;
   --modern-surface-muted: #0b0d24;
   --modern-ink: #f7f7f7;
@@ -83,7 +83,7 @@
   border: 1px solid var(--modern-border);
   border-radius: 11px;
   background: var(--modern-surface);
-  box-shadow: 0 1px 2px rgba(17,17,17, 0.025);
+  box-shadow: 0 1px 2px rgba(2, 3, 35, 0.025);
 }
 
 .modern-kpi-card {
@@ -303,7 +303,7 @@
   border-radius: 10px;
   padding: 12px;
   background: var(--modern-surface);
-  box-shadow: 0 12px 28px rgba(17,17,17, 0.12);
+  box-shadow: 0 12px 28px rgba(2, 3, 35, 0.12);
 }
 
 .modern-date-popover label {

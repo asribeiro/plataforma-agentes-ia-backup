@@ -80,7 +80,7 @@ const legacyStageColorMap: Record<string, string> = {
 
 const normalizeStageColor = (color?: string) => {
   const value = color?.trim();
-  if (!value) return '#111111';
+  if (!value) return '#020323';
   if (/^#[0-9a-f]{6}$/i.test(value)) return value;
   if (/^#[0-9a-f]{3}$/i.test(value)) {
     const [, r, g, b] = value;
@@ -88,7 +88,7 @@ const normalizeStageColor = (color?: string) => {
   }
 
   const lowered = value.toLowerCase();
-  return Object.entries(legacyStageColorMap).find(([name]) => lowered.includes(name))?.[1] || '#111111';
+  return Object.entries(legacyStageColorMap).find(([name]) => lowered.includes(name))?.[1] || '#020323';
 };
 
 const getStageDotStyle = (color?: string): React.CSSProperties => ({
@@ -313,11 +313,11 @@ export default function CRMv4() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isEditingPipeline, setIsEditingPipeline] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
-  const [newColumnColor, setNewColumnColor] = useState('#111111');
+  const [newColumnColor, setNewColumnColor] = useState('#020323');
   const [newColumnPercentageBaseStageId, setNewColumnPercentageBaseStageId] = useState('');
   const [editingStageColumnId, setEditingStageColumnId] = useState<string | null>(null);
   const [editStageName, setEditStageName] = useState('');
-  const [editStageColor, setEditStageColor] = useState('#111111');
+  const [editStageColor, setEditStageColor] = useState('#020323');
   const [editStagePercentageBaseStageId, setEditStagePercentageBaseStageId] = useState('');
   const [stageDeleteColumn, setStageDeleteColumn] = useState<Column | null>(null);
   const [minimizedColumns, setMinimizedColumns] = useState<Set<string>>(() => {
@@ -525,7 +525,7 @@ export default function CRMv4() {
     {
       id: 'novo_lead',
       title: 'Novo Lead',
-      color: '#111111',
+      color: '#020323',
       stageId: 0,
       pipelineId: 0,
       order: 1
@@ -903,7 +903,7 @@ export default function CRMv4() {
 
       showNotification('success', `Etapa "${newColumnName.trim()}" criada`);
       setNewColumnName('');
-      setNewColumnColor('#111111');
+      setNewColumnColor('#020323');
       setNewColumnPercentageBaseStageId('');
       console.log(`✅ Nova etapa "${newColumnName.trim()}" salva e reordenada`);
     } catch (error) {
@@ -922,7 +922,7 @@ export default function CRMv4() {
   const cancelEditStage = () => {
     setEditingStageColumnId(null);
     setEditStageName('');
-    setEditStageColor('#111111');
+    setEditStageColor('#020323');
     setEditStagePercentageBaseStageId('');
   };
 
@@ -1601,11 +1601,11 @@ export default function CRMv4() {
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background-color: ${isDark ? 'rgba(255,255,255,0.22)' : 'rgba(17,17,17,0.18)'};
+          background-color: ${isDark ? 'rgba(255,255,255,0.22)' : 'rgba(2,3,35,0.18)'};
           border-radius: 20px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background-color: ${isDark ? 'rgba(255,255,255,0.36)' : 'rgba(17,17,17,0.32)'};
+          background-color: ${isDark ? 'rgba(255,255,255,0.36)' : 'rgba(2,3,35,0.32)'};
         }
       `}</style>
 
@@ -1693,7 +1693,7 @@ export default function CRMv4() {
               onClick={() => {
                 if (!isEditingPipeline) {
                   setNewColumnName('');
-                  setNewColumnColor('#111111');
+                  setNewColumnColor('#020323');
                   setNewColumnPercentageBaseStageId('');
                 }
                 setIsEditingPipeline(current => !current);
