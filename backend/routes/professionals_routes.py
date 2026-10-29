@@ -40,14 +40,19 @@ def _company_do_usuario(usuario) -> int:
     return int(company_id)
 
 
-def _flag_multi(company_id: int, db: Session) -> bool:
-    """Lê o interruptor de múltiplos profissionais da empresa."""
+def _limite_de_profissionais(company_id: int, db: Session) -> int:
+    """Quantos profissionais a modalidade da empresa comporta (migration 0011).
+
+    A regra vem do NUMERO (`companies.max_professionals`), nunca do rotulo
+    (`professional_tier`): mudar a faixa comercial de "5 a 10" para "5 a 12"
+    altera a coluna, nao este codigo.
+    """
     valor = (
-        db.query(Company.multi_professional_enabled)
+        db.query(Company.max_professionals)
         .filter(Company.id == company_id)
         .scalar()
     )
-    return bool(valor)
+    return int(valor) if valor is not None else 1
 
 
 # --------------------------------------------------------------------------
@@ -144,27 +149,40 @@ def _email_em_uso(email: str, company_id: int, db: Session, ignorar_id: int = 0)
 
 
 def _verificar_limite_de_profissionais(company_id: int, db: Session) -> None:
-    """Com a flag desligada, a clínica é monoprofissional.
+    """Bloqueia o cadastro quando a clínica já atingiu o limite da modalidade.
 
     A mensagem precisa dizer o que fazer, não apenas negar: quem tenta cadastrar
-    o segundo profissional está justamente no lugar onde se liga a flag.
+    o profissional excedente é justamente quem pede a mudança de modalidade —
+    e quem muda a modalidade é o admin da plataforma, não o cliente.
     """
-    if _flag_multi(company_id, db):
-        return
+    limite = _limite_de_profissionais(company_id, db)
     existentes = (
         db.query(Professional)
         .filter(Professional.company_id == company_id, Professional.active.is_(True))
         .count()
     )
-    if existentes >= 1:
+    if existentes < limite:
+        return
+
+    if limite <= 1:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Esta clínica está configurada como monoprofissional. Ative "
-                "'múltiplos profissionais' em Configurações → Minha empresa para "
-                "cadastrar mais de um."
+                "Esta clínica está na modalidade monoprofissional (1 profissional). "
+                "A modalidade é definida pelo administrador da plataforma — peça a "
+                "mudança para 'clínica pequena' (até 4) ou 'clínica média' (até 10). "
+                "Nenhum cadastro existente é apagado por isso."
             ),
         )
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"Limite da modalidade atingido: {existentes} de {limite} profissionais "
+            f"ativos. Para cadastrar mais, peça ao administrador da plataforma a "
+            f"mudança de modalidade. Desativar um profissional que saiu também "
+            f"libera a vaga."
+        ),
+    )
 
 
 # --------------------------------------------------------------------------

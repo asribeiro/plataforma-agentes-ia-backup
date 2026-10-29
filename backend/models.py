@@ -67,12 +67,19 @@ class Company(Base):
     # clients = relationship("Client", back_populates="company")
     business_type = relationship("BusinessType", back_populates="companies")
     agent_configurations = relationship("AgentConfiguration", back_populates="company")
-    # Flag de negocio: a clinica atende com mais de um profissional?
-    # FALSE (padrao) = monoprofissional: o agente nao oferece escolha de
-    # profissional e usa a agenda do unico. TRUE = oferece os profissionais
-    # habilitados ao procedimento e consulta a agenda do escolhido.
-    multi_professional_enabled = Column(
-        Boolean, nullable=False, server_default=text("false"), default=False
+    # Modalidade da clinica (decisao de 29/10, substitui o booleano da 0010).
+    # Quem define e o admin da PLATAFORMA, nunca o cliente:
+    #   mono      -> 1 profissional. O agente nao pergunta profissional.
+    #   up_to_4   -> 1 a 4 profissionais (clinica pequena).
+    #   up_to_10  -> 5 a 10 profissionais (clinica media).
+    # professional_tier e o rotulo comercial; max_professionals e a REGRA.
+    # Guardar o numero separado evita migration quando a faixa mudar de
+    # "5 a 10" para "5 a 12": a logica de bloqueio le o numero.
+    professional_tier = Column(
+        String(20), nullable=False, server_default=text("'mono'"), default="mono"
+    )
+    max_professionals = Column(
+        Integer, nullable=False, server_default=text("1"), default=1
     )
 
     agent_workforces = relationship("AgentWorkforce", back_populates="company", cascade="all, delete-orphan")
@@ -1083,8 +1090,18 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False)
     password = Column(String(255), nullable=False)
     name = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False, server_default='staff')  # 'admin', 'manager', 'staff'
+    # Papeis (decisao de 29/10). Legado: admin, manager, staff.
+    # Clinica: clinic_admin, clinical_professional, service_professional.
+    # 30 caracteres: 'clinical_professional' tem 21 e nao cabia em 20.
+    role = Column(String(30), nullable=False, server_default='staff')
     team_id = Column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True)
+    # Amarra o usuario ao profissional que ele e. OBRIGATORIO nos dois papeis
+    # clinicos (garantido por CHECK no banco): sem esse vinculo o sistema nao
+    # sabe qual profissional e o usuario logado e a regra de "so os seus
+    # pacientes" nao e implementavel.
+    professional_id = Column(
+        Integer, ForeignKey("professionals.id", ondelete="SET NULL"), nullable=True
+    )
     is_active = Column(Boolean, nullable=False, server_default='true')
     auth_token_version = Column(Integer, nullable=False, server_default="0")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
@@ -1099,6 +1116,18 @@ class User(Base):
         Index('idx_users_client_company', 'client_id', 'company_id'),
         Index('idx_users_email', 'email'),
         Index('idx_users_team', 'team_id'),
+        Index('idx_users_professional', 'professional_id'),
+        CheckConstraint(
+            "role IN ('admin','manager','staff','clinic_admin',"
+            "'clinical_professional','service_professional')",
+            name='ck_users_role_valido',
+        ),
+        # Os dois papeis clinicos exigem o vinculo com o profissional.
+        CheckConstraint(
+            "role NOT IN ('clinical_professional','service_professional') "
+            "OR professional_id IS NOT NULL",
+            name='ck_users_papel_clinico_tem_profissional',
+        ),
     )
 
 class UserSession(Base):
@@ -2244,4 +2273,47 @@ class ProfessionalService(Base):
 
     __table_args__ = (
         Index("idx_professional_services_service", "service_id"),
+    )
+
+
+class ClinicalAccessLog(Base):
+    """Registro de acesso a dado clinico (LGPD — decisao de 29/10/2026).
+
+    O Admin Clinica ve o prontuario de TODA a clinica, porque e o
+    representante do controlador dos dados. A contrapartida obrigatoria e este
+    log: quem, quando, qual paciente, qual tela. Sem ele, acesso autorizado
+    fica indistinguivel de vazamento numa fiscalizacao.
+
+    DECISAO DE PROJETO: patient_id e professional_id NAO tem foreign key, de
+    proposito. O log precisa sobreviver a exclusao do paciente e do
+    profissional; FK com ON DELETE SET NULL apagaria justamente a informacao
+    que se quer preservar. user_id tem FK e user_email guarda o snapshot: se o
+    usuario for removido, o acesso continua rastreavel pelo e-mail.
+    """
+
+    __tablename__ = "clinical_access_log"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    company_id = Column(
+        BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Snapshot do e-mail de quem acessou: sobrevive a exclusao do usuario.
+    user_email = Column(String(255), nullable=False)
+    # Quem e o dono do dado acessado (snapshot, sem FK — ver docstring).
+    professional_id = Column(Integer, nullable=True)
+    # Paciente = contacts.id neste stack (nao existe tabela patients).
+    patient_id = Column(Integer, nullable=True)
+    # Qual tela/recurso: prontuario, anamnese, evolucao, anexo_exame.
+    resource = Column(String(40), nullable=False)
+    # read | write | export
+    action = Column(String(20), nullable=False, server_default=text("'read'"))
+    created_at = Column(
+        TIMESTAMP(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("idx_clinical_access_company_data", "company_id", "created_at"),
+        Index("idx_clinical_access_patient", "patient_id", "created_at"),
+        Index("idx_clinical_access_user", "user_id", "created_at"),
     )

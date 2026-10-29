@@ -56,9 +56,19 @@ export interface Vinculo {
   total: number;
 }
 
-export interface FlagMulti {
-  multi_professional_enabled: boolean;
+/** Modalidades definidas pelo admin da plataforma (migration 0011). */
+export type Modalidade = 'mono' | 'up_to_4' | 'up_to_10';
+
+export interface ModalidadeClinica {
+  professional_tier: Modalidade;
+  /** Regra de negócio: quantos profissionais cabem. Lido do banco, não do rótulo. */
+  max_professionals: number;
+  rotulo: string;
   profissionais_ativos: number;
+  /** false quando o limite da modalidade já foi atingido. */
+  pode_adicionar: boolean;
+  /** false para o cliente: quem define a modalidade é o admin da plataforma. */
+  pode_editar: boolean;
   orientacao: string;
 }
 
@@ -136,22 +146,23 @@ export const profissionaisApi = {
 };
 
 // --------------------------------------------------------------------------
-// Flag de múltiplos profissionais
+// Modalidade da clínica (substitui a flag da 0010)
 // --------------------------------------------------------------------------
 export const empresaApi = {
-  async lerFlag(): Promise<FlagMulti> {
+  async lerModalidade(): Promise<ModalidadeClinica> {
     const r = await api.get('/api/company/flag');
     return r.data;
   },
 
   /**
-   * Define a flag. Quando houver mais de um profissional ativo e a intenção
-   * for desligar, a API responde 409 pedindo confirmação — reenvie com
-   * `confirmar: true` depois de mostrar a mensagem ao usuário.
+   * Define a modalidade. EXCLUSIVO do admin da plataforma: o cliente recebe 403.
+   * Reduzir o limite responde 409 pedindo `confirmar: true`; rebaixar com mais
+   * profissionais ativos do que a nova faixa comporta responde 409 com a
+   * contagem — e a tela deve mostrar essa mensagem, não um erro genérico.
    */
-  async definirFlag(habilitado: boolean, confirmar = false): Promise<FlagMulti> {
+  async definirModalidade(tier: Modalidade, confirmar = false): Promise<ModalidadeClinica> {
     const r = await api.put('/api/company/flag', {
-      multi_professional_enabled: habilitado,
+      professional_tier: tier,
       confirmar,
     });
     return r.data;

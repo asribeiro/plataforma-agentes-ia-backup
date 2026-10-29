@@ -1,15 +1,21 @@
-"""Interruptor de múltiplos profissionais da empresa (F1-08, parte 3).
+"""Modalidade da clinica (F1-08, parte 3 — reescrita pela decisao de 29/10).
 
-Fica em router próprio para não interferir no company.py existente.
+Substitui o interruptor booleano `multi_professional_enabled` da migration 0010
+pelas duas colunas da 0011:
 
-Regra (decidida com o Anderson):
-- flag desligada: clínica monoprofissional. O agente não oferece escolha de
-  profissional e usa a agenda do único. Procedimentos continuam cadastráveis.
-- flag ligada: vários profissionais, escolha de quem atende cada procedimento.
+    professional_tier    'mono' | 'up_to_4' | 'up_to_10'   (rotulo comercial)
+    max_professionals    inteiro                            (regra de negocio)
 
-Desligar a flag com profissionais já cadastrados é PERMITIDO e não apaga
-ninguém: os dados permanecem para o caso de religar. O que muda é o
-comportamento do fluxo, não o cadastro.
+QUEM DECIDE: somente o admin da plataforma (allowlist ADMIN_EMAILS, a mesma do
+`require_internal_admin` do company.py). O cliente VE a modalidade e o limite,
+mas nao edita. Isso e requisito comercial: a modalidade e o que separa o plano
+vendido, nao uma preferencia da clinica.
+
+REBAIXAMENTO: bloqueado quando a clinica tem mais profissionais ativos do que o
+novo limite comporta. A mensagem diz quantos existem e quantos precisam sair —
+negar sem dizer o numero deixa o admin sem acao possivel. A regra do documento
+("bloqueia com 5 ou mais") e um caso particular desta: com 7 ativos, tanto mono
+quanto up_to_4 sao bloqueados; com 3 ativos, up_to_4 e permitido e mono nao.
 """
 
 import logging
@@ -22,10 +28,22 @@ from sqlalchemy.orm import Session
 from backend.auth import get_current_user
 from backend.db import get_db
 from backend.models import Company, Professional
+from backend.routes.company import is_internal_admin, require_internal_admin
 
 logger = logging.getLogger("saas_business.company_flag")
 
 router = APIRouter(prefix="/api/company", tags=["company"])
+
+# Uma modalidade, um limite. O limite e derivado do tier na escrita e lido
+# direto da coluna na leitura: se a faixa comercial mudar, muda so este mapa.
+LIMITE_POR_TIER = {"mono": 1, "up_to_4": 4, "up_to_10": 10}
+TIER_POR_LIMITE = {1: "mono", 4: "up_to_4", 10: "up_to_10"}
+
+ROTULO_TIER = {
+    "mono": "Monoprofissional (1 profissional)",
+    "up_to_4": "Clinica pequena (1 a 4 profissionais)",
+    "up_to_10": "Clinica media (5 a 10 profissionais)",
+}
 
 
 def _company_do_usuario(usuario) -> int:
@@ -38,85 +56,131 @@ def _company_do_usuario(usuario) -> int:
     return int(company_id)
 
 
-class FlagOut(BaseModel):
-    multi_professional_enabled: bool
+class ModalidadeOut(BaseModel):
+    professional_tier: str
+    max_professionals: int
+    rotulo: str
     profissionais_ativos: int
-    # mensagem pronta para a tela exibir ao lado do interruptor
+    # o cadastro novo cabe? a tela usa isso para desabilitar o botao "Adicionar"
+    pode_adicionar: bool
+    # false para o cliente: modalidade e definida pelo admin da plataforma
+    pode_editar: bool
     orientacao: str
 
 
-class FlagIn(BaseModel):
-    multi_professional_enabled: bool
-    # opcional: aplicar só se o cliente confirmar, quando houver mais de um
+class ModalidadeIn(BaseModel):
+    professional_tier: str
+    # baixar o limite exige confirmar=true: reduz o teto e pode bloquear
+    # cadastro em andamento
     confirmar: Optional[bool] = False
 
 
-def _montar(company_id: int, db: Session) -> FlagOut:
-    flag = bool(
-        db.query(Company.multi_professional_enabled)
-        .filter(Company.id == company_id)
-        .scalar()
-    )
-    ativos = (
+def _ativos(company_id: int, db: Session) -> int:
+    return (
         db.query(Professional)
         .filter(Professional.company_id == company_id, Professional.active.is_(True))
         .count()
     )
-    if flag:
-        orientacao = (
-            "Múltiplos profissionais ativo. O agente oferece os profissionais que "
-            "atendem o procedimento e consulta a agenda do escolhido."
-        )
-    else:
-        orientacao = (
-            "Clínica monoprofissional. O agente não pergunta o profissional e usa a "
+
+
+def _orientacao(tier: str) -> str:
+    if tier == "mono":
+        return (
+            "Clínica monoprofissional: o agente não pergunta o profissional e usa a "
             "agenda do único cadastrado. Procedimentos continuam cadastráveis."
         )
-    return FlagOut(
-        multi_professional_enabled=flag,
-        profissionais_ativos=ativos,
-        orientacao=orientacao,
+    return (
+        "O agente oferece os profissionais que atendem o procedimento e consulta a "
+        "agenda do escolhido."
     )
 
 
-@router.get("/flag", response_model=FlagOut)
-def ler_flag(db: Session = Depends(get_db), usuario=Depends(get_current_user)):
-    return _montar(_company_do_usuario(usuario), db)
-
-
-@router.put("/flag", response_model=FlagOut)
-def definir_flag(
-    dados: FlagIn,
-    db: Session = Depends(get_db),
-    usuario=Depends(get_current_user),
-):
-    company_id = _company_do_usuario(usuario)
-
-    # Desligar com mais de um profissional ativo é permitido, mas pede
-    # confirmação: a tela deve mostrar que ninguém será apagado e que a
-    # seleção deixa de aparecer.
-    if dados.multi_professional_enabled is False and not dados.confirmar:
-        ativos = (
-            db.query(Professional)
-            .filter(Professional.company_id == company_id, Professional.active.is_(True))
-            .count()
+def _montar(company_id: int, db: Session, usuario) -> ModalidadeOut:
+    linha = (
+        db.query(Company.professional_tier, Company.max_professionals)
+        .filter(Company.id == company_id)
+        .first()
+    )
+    if linha is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Empresa não encontrada"
         )
-        if ativos > 1:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"Há {ativos} profissionais ativos. Desligar o interruptor não apaga "
-                    "nenhum cadastro nem vínculo — apenas o agente deixa de oferecer "
-                    "escolha de profissional. Reenvie com confirmar=true para aplicar."
-                ),
-            )
+    tier, limite = str(linha[0]), int(linha[1])
+    ativos = _ativos(company_id, db)
+    return ModalidadeOut(
+        professional_tier=tier,
+        max_professionals=limite,
+        rotulo=ROTULO_TIER.get(tier, tier),
+        profissionais_ativos=ativos,
+        pode_adicionar=ativos < limite,
+        pode_editar=is_internal_admin(usuario),
+        orientacao=_orientacao(tier),
+    )
+
+
+@router.get("/flag", response_model=ModalidadeOut)
+def ler_modalidade(db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    """Leitura da modalidade. O caminho /flag e mantido para nao quebrar quem ja
+    chama (frontend/src/services/clinicApi.ts), mas o conteudo mudou."""
+    return _montar(_company_do_usuario(usuario), db, usuario)
+
+
+@router.put("/flag", response_model=ModalidadeOut)
+def definir_modalidade(
+    dados: ModalidadeIn,
+    db: Session = Depends(get_db),
+    usuario=Depends(require_internal_admin),
+):
+    """Troca a modalidade da clinica. Exclusivo do admin da plataforma."""
+    company_id = _company_do_usuario(usuario)
+    tier = (dados.professional_tier or "").strip().lower()
+
+    if tier not in LIMITE_POR_TIER:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Modalidade '{dados.professional_tier}' inválida. "
+                f"Use uma de: {', '.join(sorted(LIMITE_POR_TIER))}"
+            ),
+        )
+
+    novo_limite = LIMITE_POR_TIER[tier]
+    atual = (
+        db.query(Company.max_professionals).filter(Company.id == company_id).scalar()
+    )
+    ativos = _ativos(company_id, db)
+
+    # Rebaixamento: nunca deixar o limite abaixo de quem ja trabalha na clinica.
+    if ativos > novo_limite:
+        excedente = ativos - novo_limite
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"A clínica tem {ativos} profissionais ativos e a modalidade "
+                f"'{tier}' comporta {novo_limite}. Desative {excedente} "
+                f"profissional(is) antes de rebaixar — nenhum cadastro é apagado "
+                f"por esta mudança. Nada foi alterado."
+            ),
+        )
+
+    # Reduzir o limite (sem excedente ainda) pede confirmacao explicita: e uma
+    # decisao comercial, nao um ajuste de tela.
+    if atual is not None and novo_limite < int(atual) and not dados.confirmar:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Reduzir o limite de {int(atual)} para {novo_limite} bloqueia "
+                f"novos cadastros a partir de agora ({ativos} ativo(s) hoje). "
+                f"Reenvie com confirmar=true para aplicar."
+            ),
+        )
 
     db.query(Company).filter(Company.id == company_id).update(
-        {Company.multi_professional_enabled: dados.multi_professional_enabled}
+        {Company.professional_tier: tier, Company.max_professionals: novo_limite}
     )
     db.commit()
     logger.info(
-        "flag multi_professional empresa=%s valor=%s", company_id,
-        dados.multi_professional_enabled,
+        "modalidade empresa=%s tier=%s limite=%s por=%s",
+        company_id, tier, novo_limite, getattr(usuario, "email", "?"),
     )
-    return _montar(company_id, db)
+    return _montar(company_id, db, usuario)
