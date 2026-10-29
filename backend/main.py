@@ -1,3 +1,4 @@
+from backend.routes import services_routes
 # backend/main.py
 import os
 import secrets
@@ -349,6 +350,7 @@ app.include_router(waha_routes.router, prefix="/webhook", tags=["waha"])
 app.include_router(waha_routes.router, prefix="/api/waha", tags=["waha-api"])
 app.include_router(contacts_import_router, prefix="/webhook", tags=["contacts_import"])
 app.include_router(contact_archive_router, prefix="/webhook", tags=["contact_archive"])
+app.include_router(services_routes.router)
 app.include_router(contact_tasks_router, prefix="/api", tags=["contact_tasks"])
 app.include_router(contact_notes_router, prefix="/api", tags=["contact_notes"])
 
