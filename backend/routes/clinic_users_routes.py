@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user, hash_password
 from backend.db import get_db
-from backend.models import Company, Professional, User
+from backend.models import Company, Professional, Team, User
 from backend.services.papel_clinico import (
     PAPEIS_COM_PROFISSIONAL_OBRIGATORIO,
     PAPEIS_QUE_ADMINISTRAM_USUARIOS,
@@ -59,6 +59,10 @@ class ClinicaUsuarioOut(BaseModel):
     role_rotulo: str
     professional_id: Optional[int] = None
     professional_nome: Optional[str] = None
+    # Perfil de acesso: a equipe (conjunto de permissoes) que define o que a
+    # pessoa VE. Separado do papel, que diz o que ela E.
+    team_id: Optional[int] = None
+    team_nome: Optional[str] = None
     is_active: bool
 
     class Config:
@@ -73,6 +77,8 @@ class EuClinicaOut(BaseModel):
     role_rotulo: str
     professional_id: Optional[int] = None
     professional_nome: Optional[str] = None
+    team_id: Optional[int] = None
+    team_nome: Optional[str] = None
     pode_administrar_usuarios: bool
     ve_prontuario: bool
 
@@ -83,12 +89,16 @@ class ClinicaUsuarioIn(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     role: str
     professional_id: Optional[int] = None
+    # opcional: usuario sem perfil de acesso nao ve menu nenhum alem do basico
+    team_id: Optional[int] = None
 
 
 class ClinicaUsuarioPatch(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=160)
     role: Optional[str] = None
     professional_id: Optional[int] = None
+    # null explicito tira do perfil; ausente preserva (model_fields_set)
+    team_id: Optional[int] = None
     is_active: Optional[bool] = None
 
 
@@ -190,12 +200,36 @@ def _administradores_ativos(db: Session, company_id: int, excluir_id: int = 0) -
     return q.count()
 
 
+def validar_equipe(db: Session, company_id: int, team_id: Optional[int]) -> Optional[int]:
+    """Perfil de acesso tem de ser da MESMA clinica.
+
+    Sem esta checagem, um id de equipe de outra clinica seria aceito e o usuario
+    daqui herdaria permissoes de la — vazamento por id adivinhado.
+    """
+    if team_id in (None, 0):
+        return None
+    equipe = (
+        db.query(Team)
+        .filter(Team.id == int(team_id), Team.company_id == company_id)
+        .first()
+    )
+    if not equipe:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Perfil de acesso não encontrado nesta clínica.",
+        )
+    return int(equipe.id)
+
+
 def _saida(db: Session, u: User) -> ClinicaUsuarioOut:
     nome_prof = None
     if u.professional_id:
         nome_prof = (
             db.query(Professional.name).filter(Professional.id == u.professional_id).scalar()
         )
+    nome_equipe = None
+    if getattr(u, "team_id", None):
+        nome_equipe = db.query(Team.name).filter(Team.id == u.team_id).scalar()
     return ClinicaUsuarioOut(
         id=u.id,
         name=u.name,
@@ -204,6 +238,8 @@ def _saida(db: Session, u: User) -> ClinicaUsuarioOut:
         role_rotulo=ROTULOS_DE_PAPEL.get(u.role, u.role),
         professional_id=u.professional_id,
         professional_nome=nome_prof,
+        team_id=getattr(u, "team_id", None),
+        team_nome=nome_equipe,
         is_active=u.is_active,
     )
 
@@ -255,6 +291,10 @@ def quem_sou_eu(db: Session = Depends(get_db), usuario=Depends(get_current_user)
             .filter(Professional.id == professional_id)
             .scalar()
         )
+    team_id = getattr(usuario, "team_id", None)
+    nome_equipe = None
+    if team_id:
+        nome_equipe = db.query(Team.name).filter(Team.id == team_id).scalar()
     return EuClinicaOut(
         id=getattr(usuario, "id", 0),
         name=getattr(usuario, "name", "") or "",
@@ -263,6 +303,8 @@ def quem_sou_eu(db: Session = Depends(get_db), usuario=Depends(get_current_user)
         role_rotulo=ROTULOS_DE_PAPEL.get(papel, papel or "sem papel"),
         professional_id=professional_id,
         professional_nome=nome_prof,
+        team_id=team_id,
+        team_nome=nome_equipe,
         pode_administrar_usuarios=papel in PAPEIS_QUE_ADMINISTRAM_USUARIOS,
         ve_prontuario=papel in PAPEIS_QUE_VEEM_PRONTUARIO,
     )
@@ -300,6 +342,7 @@ def criar(
     professional_id = validar_papel_e_vinculo(
         db, company_id, dados.role, dados.professional_id
     )
+    team_id = validar_equipe(db, company_id, dados.team_id)
 
     novo = User(
         client_id=client_id,
@@ -309,6 +352,7 @@ def criar(
         password=hash_password(dados.password),
         role=dados.role.strip(),
         professional_id=professional_id,
+        team_id=team_id,
         is_active=True,
     )
     db.add(novo)
@@ -361,10 +405,18 @@ def atualizar(
 
     professional_id = validar_papel_e_vinculo(db, company_id, papel_novo, vinculo_novo)
 
+    # Mesma semantica do vinculo com profissional: null explicito limpa, ausente
+    # preserva. `team_id` fora do corpo nao pode zerar o perfil de quem ja tem.
+    if "team_id" in getattr(dados, "model_fields_set", set()):
+        team_novo = validar_equipe(db, company_id, dados.team_id)
+    else:
+        team_novo = getattr(obj, "team_id", None)
+
     if dados.name is not None:
         obj.name = dados.name.strip()
     obj.role = papel_novo.strip()
     obj.professional_id = professional_id
+    obj.team_id = team_novo
     if dados.is_active is not None:
         obj.is_active = dados.is_active
 
