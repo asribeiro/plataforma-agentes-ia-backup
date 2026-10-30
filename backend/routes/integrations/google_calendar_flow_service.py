@@ -10,6 +10,8 @@ from backend.models import Agenda, Agendamento, CalendarIntegration, AgentConfig
 from backend.runtime_settings import APP_NAME
 
 # Funções do serviço de API Google Calendar
+from backend.services.google_convite import descrever_convite, montar_attendees
+from backend.services.google_credencial import build_service_da_agenda
 from backend.routes.integrations.google_calendar_service import ( # Corrigido caminho do import
     build_google_oauth_service,
     create_google_event,
@@ -58,7 +60,8 @@ def _resolve_agenda_google_calendar(
         if linked_agenda and linked_agenda.google_calendar_id:
             return linked_agenda.google_calendar_id, linked_agenda
 
-    return integration.google_calendar_id, linked_agenda
+    # `integration` pode ser None agora: a credencial pode estar na agenda.
+    return getattr(integration, "google_calendar_id", None), linked_agenda
 
 
 def _build_google_event_summary(agn: Agendamento) -> str:
@@ -101,22 +104,30 @@ def sync_appointment_to_google_calendar(
         google_event_id = agn.event_id
 
         # 2. Buscar Configuração Google e resolver calendário da agenda local
+        # F1-06: a credencial vem da AGENDA quando ela tem uma (OAuth por
+        # profissional) e cai para a da empresa quando nao tem. Antes era sempre a
+        # da empresa — com N profissionais, toda agenda usava o mesmo token.
+        linked_agenda = None
+        if agn.agenda_id:
+            linked_agenda = db.query(Agenda).filter(
+                Agenda.id == agn.agenda_id, Agenda.company_id == company_id
+            ).first()
+
+        google_service, fonte_credencial = build_service_da_agenda(db, company_id, linked_agenda)
+        if not google_service:
+            logger.debug(f"{log_prefix} Integração Google não ativa (agenda={agn.agenda_id}).")
+            if agn.google_sync_status != SYNC_STATUS_NOT_APPLICABLE: agn.google_sync_status = SYNC_STATUS_NOT_APPLICABLE; db.commit()
+            return True
+        logger.info(f"{log_prefix} Credencial Google em uso: {fonte_credencial}")
+
         integration = db.query(CalendarIntegration).filter(
              CalendarIntegration.company_id == company_id, CalendarIntegration.provider == 'google'
         ).first()
-        if not integration or not integration.google_oauth_token:
-            logger.debug(f"{log_prefix} Integração Google não ativa.")
-            if agn.google_sync_status != SYNC_STATUS_NOT_APPLICABLE: agn.google_sync_status = SYNC_STATUS_NOT_APPLICABLE; db.commit()
-            return True
         target_calendar_id, linked_agenda = _resolve_agenda_google_calendar(db, agn, integration)
         if not target_calendar_id:
             logger.debug(f"{log_prefix} Agendamento sem agenda Google vinculada.")
             if agn.google_sync_status != SYNC_STATUS_NOT_APPLICABLE: agn.google_sync_status = SYNC_STATUS_NOT_APPLICABLE; db.commit()
             return True
-        google_service = build_google_oauth_service(integration, db)
-        if not google_service:
-            logger.error(f"{log_prefix} Token OAuth Google indisponível ou inválido.")
-            agn.google_sync_status = SYNC_STATUS_FAILED; db.commit(); return False
 
         # 3. Buscar Timezone DA API GOOGLE (ainda necessário para o campo 'timeZone')
         timezone_str = get_google_calendar_timezone(target_calendar_id, service=google_service) or DEFAULT_TIMEZONE
@@ -148,7 +159,16 @@ def sync_appointment_to_google_calendar(
 
         # Montar Título e Descrição
         summary = _build_google_event_summary(agn)
-        description = f"Agendamento {APP_NAME}\nCliente: {agn.nome or 'N/A'}\nTelefone: {agn.phone or 'N/A'}\nInteresse: {agn.interesse or 'Avaliação'}\nID Local: {agn.id}"
+        # F1-02: quem recebe o convite. Paciente sem e-mail NAO impede o
+        # agendamento (decisao de 28/10): o profissional vinculado a agenda
+        # continua convidado e o aviso ao paciente vai por WhatsApp.
+        profissional_email = getattr(getattr(linked_agenda, "professional", None), "email", None)
+        convidados = montar_attendees(agn.patient_email, profissional_email)
+        description = (
+            f"Agendamento {APP_NAME}\nCliente: {agn.nome or 'N/A'}\n"
+            f"Telefone: {agn.phone or 'N/A'}\nInteresse: {agn.interesse or 'Avaliação'}\n"
+            f"ID Local: {agn.id}\n{descrever_convite(convidados, profissional_email)}"
+        )
 
         # 6. Chamar API Google: Criar ou Atualizar (passando strings naive + timezone)
         new_or_updated_event_id = None
@@ -160,7 +180,8 @@ def sync_appointment_to_google_calendar(
                 calendar_id=target_calendar_id, event_id=google_event_id, summary=summary,
                 description=description, start_naive_iso=start_naive_iso, # <-- Passa string naive
                 end_naive_iso=end_naive_iso, timezone=timezone_str,       # <-- Passa ID do Timezone
-                service=google_service, create_conference=create_google_meet, return_event=True
+                service=google_service, create_conference=create_google_meet, return_event=True,
+                attendees=convidados,
             )
             if new_or_updated_event and new_or_updated_event.get("id"):
                 api_success = True
@@ -173,7 +194,8 @@ def sync_appointment_to_google_calendar(
                  start_naive_iso=start_naive_iso, # <-- Passa string naive
                  end_naive_iso=end_naive_iso,     # <-- Passa string naive
                  timezone=timezone_str,           # <-- Passa ID do Timezone
-                 service=google_service, create_conference=create_google_meet, return_event=True
+                 service=google_service, create_conference=create_google_meet, return_event=True,
+                 attendees=convidados,
              )
              if new_or_updated_event and new_or_updated_event.get("id"):
                  api_success = True
@@ -182,6 +204,14 @@ def sync_appointment_to_google_calendar(
 
         # 7. Definir Status e Salvar ID localmente
         final_sync_status = SYNC_STATUS_SYNCED if api_success else SYNC_STATUS_FAILED
+        if api_success and convidados:
+            # Prova do convite (F1-02). Sem convidado, invite_sent_at fica NULL:
+            # NULL com significado e melhor que data inventada.
+            agn.invite_sent_at = datetime.now(timezone.utc)
+            agn.invite_attendees = ", ".join(convidados)
+            logger.info(f"{log_prefix} Convite registrado para: {agn.invite_attendees}")
+        elif api_success:
+            logger.info(f"{log_prefix} Sem convite por e-mail: paciente sem e-mail, aviso por WhatsApp.")
         if api_success:
             agn.event_id = new_or_updated_event_id
             agn.google_calendar_id = target_calendar_id

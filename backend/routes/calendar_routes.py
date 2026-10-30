@@ -380,4 +380,13 @@ def get_available_slots(
             # Night
             all_slots.extend(generate_slots_for_range(day, sched.night_start, sched.night_end, agenda.slot_duration))
 
-    return all_slots
+    # F1-03: a rota usa a MESMA regra de disponibilidade do agente. Antes ela
+    # devolvia todo slot do turno — inclusive passado, ocupado no banco e ocupado
+    # no Google — e a tela oferecia vaga que o agente descartava na conversa.
+    from backend.agents_sdk.tools.slots_service import SlotsService
+
+    por_inicio = {slot.start_time: slot for slot in all_slots}
+    livres = SlotsService(db).filtrar_slots_indisponiveis(
+        company_id, agenda, list(por_inicio.keys())
+    )
+    return [por_inicio[inicio] for inicio in livres]

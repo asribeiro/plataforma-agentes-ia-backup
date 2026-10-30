@@ -76,42 +76,45 @@ class SlotsService:
             return []
 
         try:
-            from backend.models import CalendarIntegration
-            from backend.prompt.scheduling.google_calendar_integration import obter_eventos_calendario
-            from backend.routes.integrations.google_calendar_service import build_google_oauth_service
+            from backend.routes.integrations.google_calendar_service import get_busy_intervals
+            from backend.services.google_credencial import build_service_da_agenda
 
-            integration = self.db.query(CalendarIntegration).filter(
-                CalendarIntegration.company_id == company_id,
-                CalendarIntegration.provider == "google",
-            ).first()
-            if not integration or not integration.google_oauth_token:
-                return []
-
-            service = build_google_oauth_service(integration, self.db)
+            # F1-06: credencial da AGENDA (OAuth por profissional) e, quando nao
+            # houver, a da empresa. Antes era sempre a da empresa: com N
+            # profissionais, todas as agendas respondiam pela mesma conta.
+            service, fonte = build_service_da_agenda(self.db, company_id, agenda)
             if not service:
                 return []
 
             agenda_tz = self._agenda_timezone(agenda)
             start_dt = datetime.combine(start_date, time.min).replace(tzinfo=agenda_tz)
             end_dt = datetime.combine(end_date, time.max).replace(tzinfo=agenda_tz)
-            events = obter_eventos_calendario(service, calendar_id, start_dt.isoformat(), end_dt.isoformat())
+
+            # F1-03: freebusy responde "esta ocupado?" e enxerga compromisso que
+            # nao e evento legivel pelo token (marcado direto no Gmail pela
+            # secretaria). Antes so existia o que o proprio sistema reservou.
+            ocupados = get_busy_intervals(
+                calendar_id,
+                start_dt.isoformat(),
+                end_dt.isoformat(),
+                service=service,
+                time_zone=str(agenda_tz),
+            )
+            if ocupados is None:
+                logger.warning(
+                    "freebusy indisponivel na agenda %s (credencial=%s): calculando so com o banco local",
+                    getattr(agenda, "id", None), fonte,
+                )
+                return []
 
             intervals: List[Dict[str, datetime]] = []
-            for event in events:
-                start_info = event.get("start", {})
-                end_info = event.get("end", {})
-                start_raw = start_info.get("dateTime") or start_info.get("date")
-                end_raw = end_info.get("dateTime") or end_info.get("date")
+            for intervalo in ocupados:
+                start_raw = intervalo.get("start")
+                end_raw = intervalo.get("end")
                 if not start_raw or not end_raw:
                     continue
-
-                if "T" not in start_raw:
-                    busy_start = datetime.fromisoformat(f"{start_raw}T00:00:00").replace(tzinfo=agenda_tz)
-                    busy_end = datetime.fromisoformat(f"{end_raw}T00:00:00").replace(tzinfo=agenda_tz)
-                else:
-                    busy_start = datetime.fromisoformat(start_raw.replace("Z", "+00:00")).astimezone(agenda_tz)
-                    busy_end = datetime.fromisoformat(end_raw.replace("Z", "+00:00")).astimezone(agenda_tz)
-
+                busy_start = datetime.fromisoformat(str(start_raw).replace("Z", "+00:00")).astimezone(agenda_tz)
+                busy_end = datetime.fromisoformat(str(end_raw).replace("Z", "+00:00")).astimezone(agenda_tz)
                 intervals.append({
                     "start": busy_start.replace(tzinfo=None),
                     "end": busy_end.replace(tzinfo=None),
@@ -250,6 +253,66 @@ class SlotsService:
             import traceback
             logger.error(traceback.format_exc())
             return []
+
+    def filtrar_slots_indisponiveis(
+        self,
+        company_id: int,
+        agenda,
+        candidatos: List[datetime],
+        agora: Optional[datetime] = None,
+    ) -> List[datetime]:
+        """Remove candidato que ja passou, que colide com agendamento desta agenda
+        ou que o Google da como ocupado.
+
+        POR QUE ESTE METODO EXISTE: a rota `GET /api/calendar/{id}/slots` tinha a
+        propria geracao de horario e devolvia TODO slot do turno — passado, ocupado
+        no banco e ocupado no Google. A tela entao oferecia vaga que o agente
+        descartava na conversa seguinte. Duas regras de disponibilidade no mesmo
+        sistema e um bug esperando reclamacao; aqui as duas chamam esta.
+
+        `agora` e parametro para teste (nao depender do relogio da maquina).
+        """
+        if not candidatos:
+            return []
+
+        agora = agora or datetime.now()
+        margem = int(getattr(agenda, "safety_margin_minutes", 0) or 0)
+        limite = agora + timedelta(minutes=margem)
+
+        from backend.models import Agendamento
+
+        ocupados_banco = set()
+        try:
+            consulta = self.db.query(Agendamento).filter(
+                Agendamento.agenda_id == agenda.id,
+                or_(
+                    Agendamento.status.is_(None),
+                    ~Agendamento.status.ilike("%CANCELLED%"),
+                ),
+            )
+            for appt in consulta.all():
+                if appt.consulta_data is None:
+                    continue
+                ocupados_banco.add(appt.consulta_data.replace(tzinfo=None))
+        except Exception as erro:  # noqa: BLE001 - banco e local: falha aparece no log
+            logger.error("Falha ao ler agendamentos da agenda %s: %s", getattr(agenda, "id", None), erro)
+
+        inicios = sorted(candidatos)
+        intervalos_google = self._fetch_google_busy_intervals(
+            company_id, agenda, inicios[0].date(), inicios[-1].date()
+        )
+        duracao = int(getattr(agenda, "slot_duration", 30) or 30)
+
+        livres = []
+        for inicio in inicios:
+            if inicio <= limite:
+                continue
+            if inicio in ocupados_banco:
+                continue
+            if self._slot_blocked_by_google(inicio, duracao, intervalos_google):
+                continue
+            livres.append(inicio)
+        return livres
 
     def get_available_slots(
         self,

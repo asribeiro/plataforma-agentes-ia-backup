@@ -609,6 +609,12 @@ class Agenda(Base):
     google_calendar_id = Column(String(255), nullable=True)
     google_calendar_summary = Column(String(255), nullable=True)
     google_calendar_time_zone = Column(String(80), nullable=True)
+    # Credencial Google DESTA agenda (migration 0012, card F1-06). Sem ela, a
+    # leitura cai para a credencial da empresa; com ela, cada profissional
+    # autoriza a propria conta — e existe resposta para "a agenda da Dra. Ana".
+    google_account_email = Column(String(255), nullable=True)
+    google_oauth_token = Column(JSON, nullable=True)
+    google_oauth_scopes = Column(Text, nullable=True)
     # Agenda pertence a um profissional (1:1 quando ativo). Decisao de 28/10.
     # NULLABLE: o CRUD de agenda ainda cria sem profissional (ver 0009).
     professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="RESTRICT"), nullable=True)
@@ -685,6 +691,13 @@ class Agendamento(Base):
     # NAO existe google_event_id: o evento usa event_id, ja presente.
     service_id = Column(Integer, ForeignKey("services.id", ondelete="SET NULL"), nullable=True)
     invite_sent_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    # Prova do convite (migration 0012, card F1-02): para quem foi enviado.
+    # `invite_sent_at` sozinho diz que algo saiu; este campo diz para quem.
+    invite_attendees = Column(Text, nullable=True)
+    # E-mail do paciente. Nao existia em leads nem em contacts: sem campo nao
+    # ha convite. NULL = paciente sem e-mail, agendamento valido, aviso por
+    # WhatsApp (decisao de 28/10).
+    patient_email = Column(String(255), nullable=True)
     status = Column(String(20), nullable=False, server_default='SCHEDULED')
 
     # --- NOVAS COLUNAS DE STATUS DE SYNC ---

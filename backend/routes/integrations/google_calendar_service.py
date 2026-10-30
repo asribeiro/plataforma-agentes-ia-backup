@@ -6,7 +6,7 @@ import time
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Sequence  # List/Sequence: freebusy e convite
 
 # --- Bibliotecas Google API Client (Importação Direta) ---
 # Garanta que estão instaladas: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
@@ -295,10 +295,20 @@ def create_google_event(
     service: Optional[Resource] = None,
     create_conference: bool = False,
     return_event: bool = False,
+    attendees: Optional[Sequence[str]] = None,
+    send_updates: Optional[str] = None,
 ) -> Optional[Any]:
-    """Cria um evento no Google Calendar usando datetime naive + timezone ID."""
+    """Cria um evento no Google Calendar usando datetime naive + timezone ID.
+
+    F1-02: `attendees` e `sendUpdates`. Antes o evento nascia MUDO — o Google
+    criava e nao avisava ninguem. Com convidado, o aviso vai como 'all' por
+    padrao; 'none' com lista de convidados seria repetir o defeito.
+    """
+    from backend.services.google_convite import montar_attendees, politica_de_aviso
+
     service = _resolve_calendar_service(service)
     if not service: return None
+    convidados = montar_attendees(*list(attendees or []))
 
     event_body = {
         'summary': summary,
@@ -314,10 +324,13 @@ def create_google_event(
     }
     if create_conference:
         event_body["conferenceData"] = _conference_create_request()
+    if convidados:
+        event_body["attendees"] = [{"email": email} for email in convidados]
+    aviso = send_updates if send_updates is not None else politica_de_aviso(convidados)
 
     try:
         logger.info(f"Criando evento Google (naive) em '{calendar_id}': '{summary}' @ {start_naive_iso} [{timezone}]")
-        request_kwargs = {"calendarId": calendar_id, "body": event_body}
+        request_kwargs = {"calendarId": calendar_id, "body": event_body, "sendUpdates": aviso}
         if create_conference:
             request_kwargs["conferenceDataVersion"] = 1
         event = service.events().insert(**request_kwargs).execute()
@@ -344,10 +357,19 @@ def update_google_event(
     service: Optional[Resource] = None,
     create_conference: bool = False,
     return_event: bool = False,
+    attendees: Optional[Sequence[str]] = None,
+    send_updates: Optional[str] = None,
 ) -> Optional[Any]:
-    """Atualiza um evento no Google Calendar usando datetime naive + timezone ID."""
+    """Atualiza um evento no Google Calendar usando datetime naive + timezone ID.
+
+    F1-02: um reagendamento tem de AVISAR quem ja estava convidado. `attendees`
+    vai no patch e `sendUpdates` sobe como 'all' quando ha convidado.
+    """
+    from backend.services.google_convite import montar_attendees, politica_de_aviso
+
     service = _resolve_calendar_service(service)
     if not service: return None
+    convidados = montar_attendees(*list(attendees or []))
 
     event_body = {
         'summary': summary,
@@ -355,6 +377,9 @@ def update_google_event(
         'start': {'dateTime': start_naive_iso, 'timeZone': timezone},
         'end': {'dateTime': end_naive_iso, 'timeZone': timezone},
     }
+    if convidados:
+        event_body["attendees"] = [{"email": email} for email in convidados]
+    aviso = send_updates if send_updates is not None else politica_de_aviso(convidados)
     try:
         if create_conference:
             try:
@@ -365,7 +390,12 @@ def update_google_event(
                 event_body["conferenceData"] = _conference_create_request()
 
         logger.info(f"Atualizando evento Google ID '{event_id}' em '{calendar_id}': '{summary}' @ {start_naive_iso} [{timezone}]")
-        request_kwargs = {"calendarId": calendar_id, "eventId": event_id, "body": event_body}
+        request_kwargs = {
+            "calendarId": calendar_id,
+            "eventId": event_id,
+            "body": event_body,
+            "sendUpdates": aviso,
+        }
         if create_conference:
             request_kwargs["conferenceDataVersion"] = 1
         event = service.events().patch(**request_kwargs).execute()
@@ -446,3 +476,63 @@ def get_google_calendar_timezone(calendar_id: str, service: Optional[Resource] =
     except Exception as e:
          logger.exception(f"Erro inesperado ao buscar timezone do Google Calendar ID '{calendar_id}': {e}")
          return None
+
+
+def get_busy_intervals(
+    calendar_id: str,
+    time_min_iso: str,
+    time_max_iso: str,
+    service: Optional[Resource] = None,
+    time_zone: Optional[str] = None,
+) -> Optional[List[Dict[str, str]]]:
+    """Intervalos OCUPADOS do calendario, via freebusy (card F1-03).
+
+    Por que freebusy e nao `events.list`: o Google so devolve evento de calendario
+    que o token consegue LER; `freebusy` responde a pergunta que interessa — "esta
+    ocupado?" — inclusive para calendario compartilhado so como leitura de
+    disponibilidade. Consulta marcada direto no Gmail pela secretaria passa a
+    bloquear o horario, que era o furo: o sistema so conhecia o que ele mesmo
+    reservou e o agente oferecia slot ocupado.
+
+    Retorna None quando a consulta FALHOU (credencial, rede, API). None nao e
+    "livre": quem chama precisa distinguir "verifiquei e esta livre" de "nao
+    consegui verificar".
+    """
+    service = _resolve_calendar_service(service)
+    if not service:
+        return None
+
+    corpo: Dict[str, Any] = {
+        "timeMin": time_min_iso,
+        "timeMax": time_max_iso,
+        "items": [{"id": calendar_id}],
+    }
+    if time_zone:
+        corpo["timeZone"] = time_zone
+
+    try:
+        resposta = service.freebusy().query(body=corpo).execute()
+    except HttpError as erro:
+        logger.error(
+            "freebusy falhou em '%s': %s - %s", calendar_id,
+            getattr(erro, "status_code", "?"), getattr(erro, "reason", "?"),
+        )
+        return None
+    except Exception as erro:  # noqa: BLE001 - falha externa e declarada, nao silenciosa
+        logger.exception("freebusy indisponivel em '%s': %s", calendar_id, erro)
+        return None
+
+    calendarios = (resposta or {}).get("calendars") or {}
+    dados = calendarios.get(calendar_id) or {}
+    if not dados and calendarios:
+        # O Google as vezes devolve a chave normalizada; aceitar o unico item.
+        dados = next(iter(calendarios.values()))
+    if dados.get("errors"):
+        logger.warning("freebusy com erro para '%s': %s", calendar_id, dados.get("errors"))
+        return None
+
+    return [
+        {"start": str(intervalo.get("start")), "end": str(intervalo.get("end"))}
+        for intervalo in (dados.get("busy") or [])
+        if intervalo.get("start") and intervalo.get("end")
+    ]
