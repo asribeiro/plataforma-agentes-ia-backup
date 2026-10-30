@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from google_auth_oauthlib.flow import Flow
 from jose import JWTError, jwt
@@ -110,7 +110,13 @@ def _new_oauth_flow() -> Flow:
     )
 
 
-def _make_state(company_id: int, user_id: Optional[int]) -> str:
+def _make_state(company_id: int, user_id: Optional[int], agenda_id: Optional[int] = None) -> str:
+    """State assinado do OAuth. `agenda_id` marca autorizacao POR AGENDA (F1-06).
+
+    Sem `agenda_id` o token vai para a empresa (comportamento antigo, preservado);
+    com ele, o callback grava na agenda — e a empresa continua com o token dela,
+    porque as outras agendas dependem disso.
+    """
     now = datetime.now(timezone.utc)
     payload = {
         "company_id": company_id,
@@ -119,6 +125,8 @@ def _make_state(company_id: int, user_id: Optional[int]) -> str:
         "exp": int((now + timedelta(minutes=15)).timestamp()),
         "type": "google_calendar_oauth",
     }
+    if agenda_id:
+        payload["agenda_id"] = int(agenda_id)
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -280,10 +288,20 @@ def get_google_calendar_config(
 @router.get("/google/{company_id}/oauth/start")
 def start_google_calendar_oauth(
     company_id: int,
+    agenda_id: Optional[int] = Query(
+        None,
+        description="Autoriza o Google DESTA agenda (OAuth por profissional). Sem ele, autoriza a empresa.",
+    ),
+    db: Session = Depends(get_db),
     user=Depends(require_calendar_company_access),
 ):
+    """Inicia o OAuth. Com `agenda_id`, a credencial fica na agenda (F1-06)."""
+    if agenda_id is not None:
+        # 404 se a agenda nao for desta empresa: sem isso o state levaria um id
+        # de outra clinica e o token seria gravado no lugar errado.
+        _get_company_agenda_or_404(db, company_id, agenda_id)
     flow = _new_oauth_flow()
-    state = _make_state(company_id, getattr(user, "id", None))
+    state = _make_state(company_id, getattr(user, "id", None), agenda_id)
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
@@ -324,14 +342,34 @@ def google_calendar_oauth_callback(
 
     calendars = _list_writable_calendars(service)
     primary_calendar = next((item for item in calendars if item.get("primary")), None)
+    token_json = json.loads(credentials.to_json())
+    escopos = " ".join(credentials.scopes or GOOGLE_OAUTH_SCOPES)
+    conta = primary_calendar.get("id") if primary_calendar else None
+
+    agenda_id = payload.get("agenda_id")
+    if agenda_id:
+        # F1-06: credencial POR AGENDA. A empresa nao e tocada — as outras agendas
+        # continuam usando (ou nao) a credencial dela.
+        agenda = _get_company_agenda_or_404(db, company_id, int(agenda_id))
+        agenda.google_oauth_token = token_json
+        agenda.google_oauth_scopes = escopos
+        agenda.google_account_email = conta
+        if primary_calendar and not agenda.google_calendar_id:
+            agenda.google_calendar_id = primary_calendar.get("id")
+            agenda.google_calendar_summary = primary_calendar.get("summary")
+            agenda.google_calendar_time_zone = primary_calendar.get("timeZone")
+        db.add(agenda)
+        db.commit()
+        return RedirectResponse(_oauth_success_redirect(f"google_oauth=success&agenda_id={agenda.id}"))
+
     config = _get_google_integration(db, company_id)
     if not config:
         config = CalendarIntegration(provider="google", company_id=company_id)
         db.add(config)
 
-    config.google_oauth_token = json.loads(credentials.to_json())
-    config.google_oauth_scopes = " ".join(credentials.scopes or GOOGLE_OAUTH_SCOPES)
-    config.google_account_email = primary_calendar.get("id") if primary_calendar else None
+    config.google_oauth_token = token_json
+    config.google_oauth_scopes = escopos
+    config.google_account_email = conta
 
     db.commit()
     return RedirectResponse(_oauth_success_redirect())
@@ -634,3 +672,123 @@ def delete_clinicorp_config(
     db.delete(config)
     db.commit()
     return {"status": "success", "message": "Integração Clinicorp removida com sucesso."}
+
+
+# ---------------------------------------------------------------------------
+# Credencial Google POR AGENDA (F1-06)
+#
+# Os endpoints acima sao por EMPRESA. Estes sao por AGENDA: cada profissional pode
+# autorizar a propria conta Google, e a agenda passa a responder pela credencial
+# dela. Quando nao ha credencial propria, a leitura cai para a da empresa — a tela
+# precisa mostrar essa diferenca, senao o dono acha que autorizou e nao autorizou.
+# ---------------------------------------------------------------------------
+
+@router.get("/google/{company_id}/agendas/{agenda_id}/status")
+def get_agenda_google_status(
+    company_id: int,
+    agenda_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_calendar_company_access),
+):
+    from backend.services.google_credencial import credencial_google_da_agenda
+
+    agenda = _get_company_agenda_or_404(db, company_id, agenda_id)
+    dono, fonte = credencial_google_da_agenda(db, company_id, agenda)
+    return {
+        "agenda_id": agenda.id,
+        "agenda_nome": agenda.name,
+        "fonte_credencial": fonte,  # "agenda" | "empresa" | None
+        "credencial_propria": fonte == "agenda",
+        "google_connected": dono is not None,
+        "google_account_email": getattr(dono, "google_account_email", None) if dono else None,
+        "google_calendar_id": agenda.google_calendar_id,
+        "google_calendar_summary": agenda.google_calendar_summary,
+        "oauth_configured": bool(
+            os.getenv("GOOGLE_OAUTH_CLIENT_ID") and os.getenv("GOOGLE_OAUTH_CLIENT_SECRET")
+        ),
+    }
+
+
+@router.get("/google/{company_id}/agendas/{agenda_id}/calendars")
+def list_agenda_google_calendars(
+    company_id: int,
+    agenda_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_calendar_company_access),
+):
+    """Calendarios que a credencial DESTA agenda enxerga."""
+    from backend.services.google_credencial import build_service_da_agenda
+
+    agenda = _get_company_agenda_or_404(db, company_id, agenda_id)
+    service, fonte = build_service_da_agenda(db, company_id, agenda)
+    if not service:
+        raise HTTPException(
+            status_code=404,
+            detail="Esta agenda não tem Google conectado. Conecte o Google desta agenda primeiro.",
+        )
+    return {"fonte_credencial": fonte, "calendars": _list_writable_calendars(service)}
+
+
+@router.post("/google/{company_id}/agendas/{agenda_id}/calendar")
+def set_agenda_google_calendar(
+    company_id: int,
+    agenda_id: int,
+    data: GoogleCalendarConfig,
+    db: Session = Depends(get_db),
+    user=Depends(require_calendar_company_access),
+):
+    """Escolhe o calendario da agenda usando a credencial dela."""
+    from backend.services.google_credencial import build_service_da_agenda
+
+    agenda = _get_company_agenda_or_404(db, company_id, agenda_id)
+    service, _fonte = build_service_da_agenda(db, company_id, agenda)
+    if not service:
+        raise HTTPException(status_code=404, detail="Esta agenda não tem Google conectado.")
+
+    calendar_id = (data.google_calendar_id or "").strip()
+    if not calendar_id:
+        raise HTTPException(status_code=400, detail="Informe uma agenda para conectar.")
+
+    try:
+        entrada = service.calendarList().get(calendarId=calendar_id).execute()
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Agenda não encontrada na conta Google conectada a esta agenda.",
+        )
+    if entrada.get("accessRole") != "owner":
+        raise HTTPException(
+            status_code=403,
+            detail="A conta conectada só tem acesso de leitura a este calendário. Conecte uma conta que seja dona dele.",
+        )
+
+    return {
+        "status": "success",
+        "calendar": _apply_google_calendar_to_agenda(db, agenda, entrada),
+    }
+
+
+@router.delete("/google/{company_id}/agendas/{agenda_id}/credential")
+def delete_agenda_google_credential(
+    company_id: int,
+    agenda_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(require_calendar_company_access),
+):
+    """Remove a credencial da agenda. Ela volta a usar a da empresa, se existir."""
+    agenda = _get_company_agenda_or_404(db, company_id, agenda_id)
+    tinha = bool(agenda.google_oauth_token)
+    agenda.google_oauth_token = None
+    agenda.google_oauth_scopes = None
+    agenda.google_account_email = None
+    db.add(agenda)
+    db.commit()
+    return {
+        "status": "success",
+        "removed": tinha,
+        "message": (
+            "Credencial da agenda removida. Ela volta a usar a credencial da empresa, se houver."
+            if tinha
+            else "Esta agenda já não tinha credencial própria."
+        ),
+    }

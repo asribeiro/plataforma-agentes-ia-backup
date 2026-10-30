@@ -15,6 +15,7 @@ from typing import Annotated, Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from agents import RunContextWrapper, function_tool
+from backend.services.google_convite import normalizar_email  # F1-02
 from pydantic import Field
 from sqlalchemy import and_, text
 from sqlalchemy.orm import Session
@@ -172,6 +173,7 @@ def create_calendar_scheduling_tools(
         lead_id: Annotated[Optional[int], Field(description="ID do lead existente, se já conhecido.")] = None,
         interest: Annotated[str, Field(description="Interesse, serviço ou motivo do agendamento.")] = "",
         notes: Annotated[str, Field(description="Observações relevantes para a equipe.")] = "",
+        lead_email: Annotated[str, Field(description="E-mail do lead, quando ele informar. Vazio é normal: sem e-mail o agendamento vale e o aviso vai por WhatsApp.")] = "",
         confirmed_by_lead: Annotated[bool, Field(description="True somente quando o lead confirmou explicitamente o horário.")] = False,
     ) -> Dict[str, Any]:
         """
@@ -180,6 +182,12 @@ def create_calendar_scheduling_tools(
         Só use depois que o lead escolher um horário específico. Se a ferramenta
         exigir confirmação, chame com confirmed_by_lead=true apenas após o lead
         confirmar claramente que deseja aquele horário.
+
+        E-mail (lead_email): preencha SÓ se o lead informar o e-mail dele, depois
+        de você perguntar uma vez. Com e-mail, o Google envia o convite para ele e
+        para o profissional. Sem e-mail, mande vazio ("") e o agendamento vale do
+        mesmo jeito — o aviso ao paciente vai por WhatsApp. NUNCA invente, deduza
+        ou complete e-mail a partir do nome ou do telefone.
         """
 
         from backend.db import get_db
@@ -241,6 +249,11 @@ def create_calendar_scheduling_tools(
                 interesse=interest or notes or "Agendamento via agente",
                 status="SCHEDULED",
                 agenda_id=agenda.id,
+                # F1-02: e-mail do paciente, quando o lead informar. Sem ele nao ha
+                # convite por e-mail — e isso NAO impede o agendamento (decisao de
+                # 28/10). `normalizar_email` devolve None para valor invalido em vez
+                # de gravar lixo que o Google recusaria depois.
+                patient_email=normalizar_email(lead_email),
             )
             db.add(appointment)
             db.commit()
