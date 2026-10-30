@@ -175,6 +175,30 @@ def profissionais_que_atendem(
     ]
 
 
+def _profissionais_com_agenda(db: Session, company_id: int) -> List[Dict[str, Any]]:
+    """Profissionais ativos que tem agenda ativa — usado quando o modelo nao passa id.
+
+    Existe para a tool nunca responder "erro de parametro" por um id que so o banco sabe.
+    """
+    from backend.models import Agenda, Professional
+
+    linhas = (
+        db.query(Professional)
+        .join(Agenda, Agenda.professional_id == Professional.id)
+        .filter(
+            Professional.company_id == company_id,
+            Professional.active.is_(True),
+            Agenda.active.is_(True),
+        )
+        .order_by(Professional.name.asc())
+        .all()
+    )
+    unicos = {}
+    for prof in linhas:
+        unicos[prof.id] = {"professional_id": prof.id, "nome": prof.name}
+    return list(unicos.values())
+
+
 def _normalizar_nome(texto: str) -> str:
     """Minusculo, sem pontuacao e com espaco simples.
 
@@ -537,8 +561,11 @@ def create_clinical_tools(company_id: int, db_session_factory=None) -> List[Any]
 
         return next(get_db())
 
-    @function_tool
-    async def buscar_procedimentos_tool(termo: str = "") -> Dict[str, Any]:
+    # strict_mode=False: em modo estrito o SDK poe TODOS os parametros em `required`,
+    # e uma chamada sem o campo e recusada inteira. Com strict desligado, `required` lista
+    # so o que nao tem default.
+    @function_tool(strict_mode=False)
+    async def buscar_procedimentos_tool(termo: Optional[str] = None) -> Dict[str, Any]:
         """Lista os procedimentos da clinica, com duracao e preco.
 
         Use ANTES de falar de valor: procedimento sem preco (`citavel=False`)
@@ -552,8 +579,8 @@ def create_clinical_tools(company_id: int, db_session_factory=None) -> List[Any]
         finally:
             db.close()
 
-    @function_tool
-    async def profissionais_que_atendem_tool(service_id: int) -> Dict[str, Any]:
+    @function_tool(strict_mode=False)
+    async def profissionais_que_atendem_tool(service_id: Optional[int] = None) -> Dict[str, Any]:
         """Quem da clinica faz aquele procedimento (so ativos, so com vinculo).
 
         Chame sempre antes de oferecer um profissional: oferecer quem nao faz o
@@ -566,23 +593,58 @@ def create_clinical_tools(company_id: int, db_session_factory=None) -> List[Any]
         finally:
             db.close()
 
-    @function_tool
+    @function_tool(strict_mode=False)
     async def horarios_disponiveis_tool(
-        professional_id: int,
-        service_id: int = 0,
-        periodo: str = "",
+        professional_id: Optional[int] = None,
+        service_id: Optional[int] = None,
+        periodo: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Horarios LIVRES daquele profissional, em ordem cronologica (max 3).
+        """Horarios LIVRES, em ordem cronologica (no maximo 3 opcoes).
 
-        A janela ja foi verificada (turno, slot publicado, agendamento ativo e
-        freebusy do Google quando ha credencial). Use `periodo` = "manha",
-        "tarde" ou "noite" quando o paciente restringir. Se vier lista vazia,
-        NAO invente horario: ofereca mais dias, lista de espera ou atendente.
+        `professional_id` e OPCIONAL: se nao vier, a tool resolve sozinha quando a
+        clinica tem um unico profissional habilitado para o procedimento. Se houver
+        mais de um, devolve a lista para voce perguntar com quem o paciente quer ser
+        atendido. Nunca falhe por falta desse id.
+
+        Use `periodo` = "manha", "tarde" ou "noite" quando o paciente restringir. Se
+        vier lista vazia, NAO invente horario: ofereca mais dias, lista de espera ou
+        atendente.
         """
         db = _abrir_db()
         try:
+            service_id = service_id or 0
+            alvo = professional_id or 0
+            if not alvo:
+                # Resolve o profissional sem depender de o modelo saber o id.
+                if service_id:
+                    candidatos = profissionais_que_atendem(db, company_id, service_id)
+                else:
+                    candidatos = profissionais_que_atendem(db, company_id, 0)
+                    if not candidatos:
+                        candidatos = _profissionais_com_agenda(db, company_id)
+                if len(candidatos) == 1:
+                    alvo = candidatos[0]["professional_id"]
+                elif len(candidatos) > 1:
+                    return {
+                        "precisa_escolher": True,
+                        "profissionais": candidatos,
+                        "observacao": (
+                            "Mais de um profissional atende: pergunte ao paciente com quem "
+                            "ele quer ser atendido e chame de novo com professional_id."
+                        ),
+                    }
+                else:
+                    return {
+                        "total": 0,
+                        "horarios": [],
+                        "observacao": (
+                            "Nenhum profissional ativo habilitado para este procedimento. "
+                            "Ofereca falar com um atendente."
+                        ),
+                    }
+
             itens = horarios_disponiveis(
-                db, company_id, professional_id, service_id or None, periodo or None
+                db, company_id, alvo, service_id or None, periodo or None
             )
             return {
                 "total": len(itens),

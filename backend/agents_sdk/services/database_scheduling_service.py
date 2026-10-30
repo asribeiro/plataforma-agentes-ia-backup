@@ -463,6 +463,33 @@ class DatabaseSchedulingService:
                 days_ahead=30
             )
 
+    def get_available_slots_filtered(
+        self,
+        company_id: Optional[int] = None,
+        weekday_name: Optional[str] = None,
+        time_period: Optional[str] = None,
+        day_type: Optional[str] = None,
+        limit: int = 20,
+        agenda_id: Optional[int] = None,
+        professional_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Paridade de contrato com o SlotsService.
+
+        A tool de agendamento chama este metodo nos fallbacks. Como este servico so expunha
+        `get_available_slots_from_database`, a chamada estourava AttributeError sempre que o
+        filtro por data devolvia zero — derrubando a consulta inteira. Aqui delegamos para o
+        servico interno, que e quem gera os slots dinamicos.
+        """
+        return self.slots_service.get_available_slots_filtered(
+            company_id=company_id if company_id is not None else self.company_id,
+            weekday_name=weekday_name,
+            time_period=time_period,
+            day_type=day_type,
+            limit=limit,
+            agenda_id=agenda_id,
+            professional_id=professional_id,
+        )
+
     def _fetch_clinicorp_available_slots(self, integration_conf: Dict[str, str]) -> List[datetime]:
         """Fetch from Clinicorp API (same logic as original)"""
         try:

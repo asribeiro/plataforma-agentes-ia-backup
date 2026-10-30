@@ -22,6 +22,28 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+def _slots_filtrados(servico, company_id=None, limit=10, agenda_id=None):
+    """Busca slots num servico de agenda, seja qual for o contrato dele.
+
+    O servico injetado pode ser `SlotsService` (tem `get_available_slots_filtered`) ou
+    `DatabaseSchedulingService` (expõe `get_available_slots_from_database`). O código antigo
+    assumia sempre o método do SlotsService: quando o filtro por data dava zero, o fallback
+    estourava AttributeError e a tool respondia "Erro ao consultar horários disponíveis" — o
+    agente então dizia ao paciente que não conseguia consultar a agenda.
+    """
+    if hasattr(servico, "get_available_slots_filtered"):
+        return servico.get_available_slots_filtered(
+            company_id=company_id,
+            weekday_name=None,
+            time_period=None,
+            limit=limit,
+            agenda_id=agenda_id,
+        )
+    return servico.get_available_slots_from_database(
+        limit=limit, weekday_name=None, time_period=None, day_type=None
+    )
+
 async def _analyze_scheduling_preferences_with_context(
     current_message: str,
     conversation_history: List[str] = None,
@@ -959,22 +981,9 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                         logger.info(f"[FallbackStrategy] Attempting Strategy 2: Broad Search (Next available)")
 
                         def _fetch_fallback_2():
-                            if is_legacy_service:
-                                # Legacy service: "None" parameters usually trigger default/broad search or next available
-                                return servico_slots.get_available_slots_filtered(
-                                    company_id=company_id,
-                                    weekday_name=None, # Relaxed
-                                    time_period=None,  # Relaxed
-                                    limit=10,
-                                    agenda_id=agenda_id
-                                )
-                            else:
-                                return servico_slots.get_available_slots_from_database(
-                                    limit=10,
-                                    weekday_name=None,
-                                    time_period=None,
-                                    day_type=None
-                                )
+                            return _slots_filtrados(
+                                servico_slots, company_id=company_id, limit=10, agenda_id=agenda_id
+                            )
 
                         fallback_slots = await asyncio.to_thread(_fetch_fallback_2)
                         if fallback_slots:
@@ -1114,19 +1123,16 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                     # --- LAST RESORT FALLBACK ---
                     # Search broadly for the next 7 days
                     def _fetch_last_resort():
-                         return servico_slots.get_available_slots_filtered(
-                             company_id=company_id,
-                             limit=50,  # Get ALL available slots (requested by user)
-                             weekday_name=None,
-                             time_period=None,
-                             agenda_id=agenda_id
+                         return _slots_filtrados(
+                             servico_slots, company_id=company_id, limit=50, agenda_id=agenda_id
                          )
 
                     last_resort_slots = await asyncio.to_thread(_fetch_last_resort)
 
                     if last_resort_slots:
-                        # LOGIC: Return ALL found slots (previously limited to 2)
-                        slots = last_resort_slots
+                        # Tres alternativas: e o que o produto pede quando o horario
+                        # solicitado nao esta livre. Antes devolvia a lista inteira.
+                        slots = last_resort_slots[:3]
                         logger.critical(f"[AGGRESSIVE_FALLBACK] Found {len(last_resort_slots)} slots, returning ALL for suggestion.")
 
                         # Build message: "I didn't find [X], but I found [Y]"
@@ -1246,7 +1252,9 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                     slots_str = " | ".join(formatted_slots)
 
                     # INSTRUCTION INJECTION: Guide the agent to limit suggestions in speech
-                    instruction = "\n\n[INSTRUÇÃO DO SISTEMA: Selecione mentalmente apenas 2 (duas) melhores opções para oferecer ao cliente. NÃO leia a lista completa de horários.]"
+                    # Tres opcoes: o produto pede tres alternativas quando o horario
+                    # pedido nao esta livre (antes eram duas).
+                    instruction = "\n\n[INSTRUÇÃO DO SISTEMA: Ofereça ao cliente no máximo 3 (três) opções de horário desta lista. NÃO leia a lista completa.]"
 
                     final_response = f"SLOTS_DISPONÍVEIS: {slots_str}{instruction}"
                 else:
