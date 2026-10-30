@@ -39,6 +39,7 @@ import TelegramIntegration from './pages/TelegramIntegration.tsx';
 import Procedimentos from './pages/Procedimentos.tsx';
 import Profissionais from './pages/Profissionais.tsx';
 import Equipe from './pages/Equipe.tsx';
+import Plataforma from './pages/Plataforma.tsx';
 
 const AgendaIntegrationRedirect: React.FC = () => {
   const location = useLocation();
@@ -92,6 +93,11 @@ const App: React.FC = () => {
                   {/* Equipe da clinica: papel e vinculo (F1-12). Fica junto das
                       telas de cadastro porque e o mesmo dono que usa. */}
                   <Route path="/equipe" element={<Equipe />} />
+
+                  {/* Painel da plataforma (admin master): todos os clientes.
+                      Sem item de menu, a tela existiria e ninguem chegaria —
+                      o menu passa a mostra-la so para admin master. */}
+                  <Route path="/plataforma" element={<Plataforma />} />
 
                   {/* Configurações da Empresa */}
                   <Route path="/account/profile" element={<AccountProfile />} />

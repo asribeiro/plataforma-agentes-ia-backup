@@ -26,6 +26,8 @@ export interface MenuItem {
   isGroup?: boolean;
   /** So aparece para quem administra usuarios da clinica (papel clinico). */
   requiresClinicalAdmin?: boolean;
+  /** So aparece para o admin master da plataforma (flag de useAdminPlataforma). */
+  requiresPlatformAdmin?: boolean;
 }
 
 export interface SubItem {
@@ -38,6 +40,8 @@ export interface SubItem {
   subItems?: SubItem[]; // Suporte a n-níveis (L3)
   /** Idem: escondido de quem nao administra a equipe da clinica. */
   requiresClinicalAdmin?: boolean;
+  /** Idem: escondido de quem nao e admin master da plataforma. */
+  requiresPlatformAdmin?: boolean;
 }
 
 export const USER_TYPE_PERMISSIONS: Record<UserType, Permission[]> = {
@@ -136,12 +140,47 @@ export const podeAdministrarEquipe = (): boolean => {
   }
 };
 
-export const filterMenusByPermissions = (menuItems: MenuItem[]): MenuItem[] => {
+/**
+ * Chave onde `useAdminPlataforma` grava se o login e o admin master.
+ *
+ * Mesmo mecanismo do papel clinico: a flag vem de GET /api/admin/eu (que nunca
+ * responde 403) e fica em localStorage para o menu ja nascer certo.
+ */
+export const CHAVE_ADMIN_PLATAFORMA = 'plataforma_admin';
+
+/** O usuario logado administra a plataforma (admin master)? */
+export const podeAdministrarPlataforma = (): boolean => {
+  try {
+    return localStorage.getItem(CHAVE_ADMIN_PLATAFORMA) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export interface FiltroMenuOpcoes {
+  /**
+   * Valor ja resolvido por `useAdminPlataforma`. Quando ausente, cai na flag do
+   * localStorage — e o mesmo caminho do `requiresClinicalAdmin`, que le a flag
+   * de `usePapelClinico`. Enquanto a resposta nao chegou, o item fica escondido:
+   * melhor a tela aparecer um instante depois do que oferecer um 403.
+   */
+  ehAdminPlataforma?: boolean;
+}
+
+export const filterMenusByPermissions = (
+  menuItems: MenuItem[],
+  opcoes: FiltroMenuOpcoes = {},
+): MenuItem[] => {
+  const ehAdminPlataforma = opcoes.ehAdminPlataforma ?? podeAdministrarPlataforma();
+
   return menuItems.map(item => {
     const nextItem: MenuItem = {
       ...item,
       subItems: item.subItems ? item.subItems.filter(subItem => {
         if (subItem.permission && !hasPermission(subItem.permission)) {
+          return false;
+        }
+        if (subItem.requiresPlatformAdmin && !ehAdminPlataforma) {
           return false;
         }
         return true;
@@ -154,6 +193,10 @@ export const filterMenusByPermissions = (menuItems: MenuItem[]): MenuItem[] => {
     }
 
     if (item.requiresClinicalAdmin && !podeAdministrarEquipe()) {
+      return false;
+    }
+
+    if (item.requiresPlatformAdmin && !ehAdminPlataforma) {
       return false;
     }
 

@@ -6,6 +6,7 @@ import {
   CreditCard,
   GitMerge,
   KeyRound,
+  Layers,
   LayoutDashboard,
   Megaphone,
   MessageSquare,
@@ -171,6 +172,18 @@ export const SIDEBAR_MODULE_MENUS: Record<ModuleKey, MenuItem[]> = {
   config: [
     { path: '/account/profile', label: 'Perfil da conta', icon: UserRound, permission: 'company', isNew: true },
     { path: '/company', label: 'Minha Empresa', icon: Building2, permission: 'company' },
+    // Painel da plataforma (admin master): a lista de TODOS os clientes. Fica
+    // ao lado de "Minha Empresa" de proposito — /company e a empresa do login,
+    // esta tela e a carteira inteira. `requiresPlatformAdmin` e resolvido em
+    // filterMenusByPermissions com a flag de useAdminPlataforma (GET
+    // /api/admin/eu): o modelo de permissoes generico nao conhece admin master.
+    {
+      path: '/plataforma',
+      label: 'Clientes da plataforma',
+      icon: Layers,
+      permission: 'company',
+      requiresPlatformAdmin: true,
+    },
     { path: '/company/ai-provider', label: 'Provedor de IA', icon: KeyRound, permission: 'company' },
     { path: '/config/midias', label: 'Canais & Origens', icon: Share2, isNew: true, permission: 'company' },
     { path: '/company/custom-fields', label: 'Campos Personalizados', icon: ClipboardCheck, permission: 'company' },
@@ -288,7 +301,7 @@ export const resolveActiveModule = (pathname: string): ModuleKey => {
   if (pathname.startsWith('/prompt/support-group')) return 'conexoes';
   if (pathname.startsWith('/agents') || pathname.startsWith('/prompt') || pathname.startsWith('/flows')) return 'inteligencia';
   if (pathname.startsWith('/whatsapp') || pathname.startsWith('/integrations') || pathname.startsWith('/webhooks')) return 'conexoes';
-  if (pathname.startsWith('/account') || pathname.startsWith('/company') || pathname.startsWith('/config')) return 'config';
+  if (pathname.startsWith('/account') || pathname.startsWith('/company') || pathname.startsWith('/config') || pathname.startsWith('/plataforma')) return 'config';
 
   return 'dashboard';
 };
