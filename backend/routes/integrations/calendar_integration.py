@@ -227,7 +227,7 @@ def _select_calendar(db: Session, integration: CalendarIntegration, calendar_id:
 
 def _link_calendar_to_agenda(
     db: Session,
-    integration: CalendarIntegration,
+    integration: Optional[CalendarIntegration],
     agenda: Agenda,
     calendar_id: str,
 ) -> dict:
@@ -235,7 +235,12 @@ def _link_calendar_to_agenda(
     if not normalized_calendar_id:
         raise HTTPException(status_code=400, detail="Informe uma agenda Google para vincular.")
 
-    service = build_google_oauth_service(integration, db)
+    # A credencial e a da AGENDA quando ela tem uma; senao, a da empresa. Usar
+    # sempre a da empresa deixava vincular um calendario de OUTRA conta a uma
+    # agenda que escreve com o token do profissional.
+    from backend.services.google_credencial import build_service_da_agenda
+
+    service, _fonte = build_service_da_agenda(db, agenda.company_id, agenda)
     if not service:
         raise HTTPException(status_code=401, detail="Google Agenda precisa ser reconectado.")
 
@@ -251,8 +256,21 @@ def _link_calendar_to_agenda(
     return _apply_google_calendar_to_agenda(db, agenda, calendar_list_entry)
 
 
-def _oauth_success_redirect(query: str = "google_oauth=success") -> str:
-    return f"{_public_app_origin()}/prompt/agenda?{query}"
+def _oauth_success_redirect(
+    query: str = "google_oauth=success",
+    agenda_id: Optional[int] = None,
+) -> str:
+    """Destino depois do OAuth.
+
+    Com `agenda_id` a pessoa autorizou o Google de UMA agenda: ela tem de voltar
+    para a tela de agendas (/calendar-config), na aba de horarios, e nao para a
+    tela de integracao da empresa — senao autoriza e nao ve o resultado.
+    """
+    origem = _public_app_origin()
+    if agenda_id:
+        separador = "&" if query else ""
+        return f"{origem}/calendar-config?tab=hours&{query}{separador}agenda_id={agenda_id}"
+    return f"{origem}/prompt/agenda?{query}"
 
 
 @router.get("/google/{company_id}")
@@ -318,27 +336,37 @@ def google_calendar_oauth_callback(
     error: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
+    # O state ja diz de qual agenda se trata: sem isso o erro volta sem dizer
+    # QUAL agenda falhou e a tela nao consegue ser especifica.
+    payload = _read_state(state) if state else None
+    agenda_do_state = payload.get("agenda_id") if payload else None
+
     if error:
-        return RedirectResponse(_oauth_success_redirect(f"google_oauth=error&reason={error}"))
+        return RedirectResponse(
+            _oauth_success_redirect(f"google_oauth=error&reason={error}", agenda_do_state)
+        )
 
     if not code:
         raise HTTPException(status_code=400, detail="Código OAuth ausente.")
 
-    payload = _read_state(state)
     company_id = int(payload["company_id"])
 
     flow = _new_oauth_flow()
     try:
         flow.fetch_token(code=code)
     except Exception:
-        return RedirectResponse(_oauth_success_redirect("google_oauth=error&reason=token"))
+        return RedirectResponse(
+            _oauth_success_redirect("google_oauth=error&reason=token", agenda_do_state)
+        )
 
     credentials = flow.credentials
     service = build_google_oauth_service(
         type("TemporaryIntegration", (), {"google_oauth_token": json.loads(credentials.to_json())})()
     )
     if not service:
-        return RedirectResponse(_oauth_success_redirect("google_oauth=error&reason=service"))
+        return RedirectResponse(
+            _oauth_success_redirect("google_oauth=error&reason=service", agenda_do_state)
+        )
 
     calendars = _list_writable_calendars(service)
     primary_calendar = next((item for item in calendars if item.get("primary")), None)
@@ -360,7 +388,9 @@ def google_calendar_oauth_callback(
             agenda.google_calendar_time_zone = primary_calendar.get("timeZone")
         db.add(agenda)
         db.commit()
-        return RedirectResponse(_oauth_success_redirect(f"google_oauth=success&agenda_id={agenda.id}"))
+        return RedirectResponse(
+            _oauth_success_redirect("google_oauth=success", agenda.id)
+        )
 
     config = _get_google_integration(db, company_id)
     if not config:
@@ -408,9 +438,8 @@ def link_google_calendar_to_agenda(
     db: Session = Depends(get_db),
     user=Depends(require_calendar_company_access),
 ):
-    integration = _get_google_integration_or_404(db, company_id)
     agenda = _get_company_agenda_or_404(db, company_id, agenda_id)
-    calendar = _link_calendar_to_agenda(db, integration, agenda, data.google_calendar_id)
+    calendar = _link_calendar_to_agenda(db, None, agenda, data.google_calendar_id)
     return {
         "status": "success",
         "message": "Agenda local vinculada ao Google Agenda.",
@@ -426,7 +455,8 @@ def unlink_google_calendar_from_agenda(
     db: Session = Depends(get_db),
     user=Depends(require_calendar_company_access),
 ):
-    _get_google_integration_or_404(db, company_id)
+    # Desvincular e limpar colunas: nao depende de credencial nenhuma. Exigir a
+    # da empresa impedia desvincular quando so a agenda tinha Google conectado.
     agenda = _get_company_agenda_or_404(db, company_id, agenda_id)
     agenda.google_calendar_id = None
     agenda.google_calendar_summary = None
@@ -448,9 +478,10 @@ def create_google_calendar_for_agenda(
     db: Session = Depends(get_db),
     user=Depends(require_calendar_company_access),
 ):
-    integration = _get_google_integration_or_404(db, company_id)
+    from backend.services.google_credencial import build_service_da_agenda
+
     agenda = _get_company_agenda_or_404(db, company_id, agenda_id)
-    service = build_google_oauth_service(integration, db)
+    service, _fonte = build_service_da_agenda(db, company_id, agenda)
     if not service:
         raise HTTPException(status_code=401, detail="Google Agenda precisa ser reconectado.")
 
