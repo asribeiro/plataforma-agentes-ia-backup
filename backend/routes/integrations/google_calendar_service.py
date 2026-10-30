@@ -35,10 +35,14 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar.readonly' # <-- ADICIONAR ESTE ESCOPO
 ]
 
+# `calendar.app.created` e `calendar.events.owned` só dão acesso a calendários CRIADOS
+# pelo app. O calendário real do profissional (aquele que o paciente já usa) não é um deles,
+# e por isso o freebusy voltava 403 insufficient scopes — o sistema caía para events.list e,
+# na prática, ignorava o Google. Para enxergar conflito de verdade é preciso `calendar.events`
+# (escopo sensível: exige reautorização de cada agenda já conectada) + leitura da lista.
 GOOGLE_OAUTH_SCOPES = [
     "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-    "https://www.googleapis.com/auth/calendar.app.created",
-    "https://www.googleapis.com/auth/calendar.events.owned",
+    "https://www.googleapis.com/auth/calendar.events",
 ]
 
 
