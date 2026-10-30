@@ -609,9 +609,7 @@ class Agenda(Base):
     google_calendar_id = Column(String(255), nullable=True)
     google_calendar_summary = Column(String(255), nullable=True)
     google_calendar_time_zone = Column(String(80), nullable=True)
-    # Credencial Google DESTA agenda (migration 0012, card F1-06). Sem ela, a
-    # leitura cai para a credencial da empresa; com ela, cada profissional
-    # autoriza a propria conta — e existe resposta para "a agenda da Dra. Ana".
+    # Credencial OAuth Google exclusiva desta agenda (migration 0012).
     google_account_email = Column(String(255), nullable=True)
     google_oauth_token = Column(JSON, nullable=True)
     google_oauth_scopes = Column(Text, nullable=True)
@@ -2333,3 +2331,13 @@ class ClinicalAccessLog(Base):
         Index("idx_clinical_access_patient", "patient_id", "created_at"),
         Index("idx_clinical_access_user", "user_id", "created_at"),
     )
+
+
+class PlatformSetting(Base):
+    """Configuração global da plataforma (chave/valor). Segredos ficam criptografados."""
+    __tablename__ = "platform_settings"
+
+    key = Column(String(100), primary_key=True)
+    value_encrypted = Column(Text, nullable=False)
+    updated_by = Column(String(255), nullable=True)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)

@@ -33,7 +33,6 @@ from backend.services.google_convite import (
 )
 from backend.services.google_credencial import (
     FONTE_AGENDA,
-    FONTE_EMPRESA,
     calendar_id_da_agenda,
     credencial_google_da_agenda,
 )
@@ -273,10 +272,10 @@ def test_credencial_da_agenda_ganha_da_empresa(db, cenario):
     assert dono.google_oauth_token["refresh_token"] == "r-agenda"
 
 
-def test_sem_credencial_na_agenda_cai_para_a_empresa(db, cenario):
+def test_credencial_da_empresa_nao_e_herdada_pela_agenda(db, cenario):
     dono, fonte = credencial_google_da_agenda(db, cenario["empresa"].id, cenario["agenda"])
-    assert fonte == FONTE_EMPRESA
-    assert dono.google_calendar_id == "cal-empresa"
+    assert dono is None
+    assert fonte is None
 
 
 def test_sem_credencial_nenhuma_devolve_none_e_nao_explode(db):
@@ -293,7 +292,7 @@ def test_calendar_id_prefere_o_da_agenda(db, cenario):
     assert calendar_id_da_agenda(db, cenario["empresa"].id, cenario["agenda"]) == "cal-da-dra-ana"
 
 
-def test_calendar_id_cai_para_o_da_empresa(db, cenario):
+def test_calendar_id_nao_cai_para_o_da_empresa(db, cenario):
     cenario["agenda"].google_calendar_id = None
     db.commit()
-    assert calendar_id_da_agenda(db, cenario["empresa"].id, cenario["agenda"]) == "cal-empresa"
+    assert calendar_id_da_agenda(db, cenario["empresa"].id, cenario["agenda"]) is None

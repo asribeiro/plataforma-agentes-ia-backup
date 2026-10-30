@@ -5,9 +5,10 @@ prova e o que o sistema GRAVA e ONDE grava — que era exatamente o furo: a colu
 existia e ninguem conseguia popular.
 """
 import json
+from types import SimpleNamespace
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -111,6 +112,44 @@ def test_state_carrega_o_agenda_id_quando_ha_agenda(cenario):
     assert com_agenda["agenda_id"] == cenario["agenda"].id
 
 
+def test_google_agenda_so_pode_ser_gerenciado_pelo_admin_ou_pelo_proprio_profissional():
+    import backend.routes.integrations.calendar_integration as ci
+
+    agenda = Agenda(company_id=EMPRESA, name="Dra. Ana", professional_id=41)
+    admin_clinica = SimpleNamespace(role="clinic_admin")
+    profissional_dono = SimpleNamespace(role="service_professional", professional_id=41)
+    profissional_alheio = SimpleNamespace(role="service_professional", professional_id=42)
+    gerente = SimpleNamespace(role="manager", professional_id=41)
+
+    ci._ensure_google_agenda_access(admin_clinica, agenda)
+    ci._ensure_google_agenda_access(profissional_dono, agenda)
+    for usuario in (profissional_alheio, gerente):
+        with pytest.raises(HTTPException) as erro:
+            ci._ensure_google_agenda_access(usuario, agenda)
+        assert erro.value.status_code == 403
+
+
+def test_admin_da_plataforma_configura_agenda_de_qualquer_empresa(monkeypatch):
+    import backend.routes.integrations.calendar_integration as ci
+
+    agenda = Agenda(company_id=99, name="Dr. Outro", professional_id=77)
+    admin_plataforma = SimpleNamespace(role="admin", email="master@x.com")
+    monkeypatch.setattr(ci, "is_internal_admin", lambda u: u is admin_plataforma)
+
+    ci._ensure_google_agenda_access(admin_plataforma, agenda)
+    with pytest.raises(HTTPException) as erro:
+        ci._ensure_google_agenda_access(SimpleNamespace(role="admin", email="outro@x.com"), agenda)
+    assert erro.value.status_code == 403
+
+
+def test_retorno_do_oauth_pode_ser_a_tela_google_agenda():
+    import backend.routes.integrations.calendar_integration as ci
+
+    destino = ci._oauth_success_redirect("google_oauth=success", 5, "integrations")
+    assert "/calendar-config?tab=integrations&" in destino
+    assert "agenda_id=5" in destino
+
+
 @pytest.fixture()
 def app(db):
     import backend.routes.integrations.calendar_integration as ci
@@ -136,7 +175,7 @@ def _mocar_oauth(monkeypatch, calendarios, token="r-da-agenda"):
         def fetch_token(self, code=None):
             assert code
 
-    monkeypatch.setattr(ci, "_new_oauth_flow", lambda: FlowFalso())
+    monkeypatch.setattr(ci, "_new_oauth_flow", lambda *a, **k: FlowFalso())
     monkeypatch.setattr(ci, "build_google_oauth_service", lambda *a, **k: object())
     monkeypatch.setattr(ci, "_list_writable_calendars", lambda service: calendarios)
 
@@ -220,8 +259,8 @@ def test_callback_sem_agenda_id_continua_gravando_na_empresa(db, cenario, app, m
     assert agenda.google_oauth_token is None, "sem agenda_id a agenda nao recebe credencial"
 
 
-def test_desconectar_credencial_da_agenda_volta_para_a_empresa(db, cenario):
-    from backend.services.google_credencial import FONTE_AGENDA, FONTE_EMPRESA, credencial_google_da_agenda
+def test_desconectar_credencial_da_agenda_nao_herda_a_da_empresa(db, cenario):
+    from backend.services.google_credencial import FONTE_AGENDA, credencial_google_da_agenda
 
     agenda = cenario["agenda"]
     agenda.google_oauth_token = {"refresh_token": "r-agenda"}
@@ -242,5 +281,5 @@ def test_desconectar_credencial_da_agenda_volta_para_a_empresa(db, cenario):
     db.commit()
 
     dono, fonte = credencial_google_da_agenda(db, cenario["empresa"].id, agenda)
-    assert fonte == FONTE_EMPRESA
-    assert dono.google_calendar_id == "cal-empresa"
+    assert dono is None
+    assert fonte is None

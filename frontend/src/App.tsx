@@ -114,6 +114,7 @@ const App: React.FC = () => {
                   <Route path="/whatsapp" element={<WhatsAppConnectPage />} />
                   <Route path="/integrations" element={<IntegrationsHub />} />
                   <Route path="/integrations/telegram" element={<TelegramIntegration />} />
+                  <Route path="/integrations/google-agenda" element={<Navigate to="/calendar-config?tab=integrations" replace />} />
                   <Route path="/campaigns/whatsapp" element={<WhatsAppCampaignsPage />} />
 
                   {/* Configurações de IA */}

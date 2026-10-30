@@ -9,8 +9,7 @@ from sqlalchemy.sql import text
 import os
 import redis
 import json
-from backend.models import CalendarIntegration
-from backend.routes.integrations.google_calendar_service import build_google_oauth_service
+from backend.models import Agenda
 from ..db_integration.agent_config import get_agent_config_dict
 from .google_calendar_integration import obter_eventos_calendario
 from .clinicorp_integration import ClinicorpIntegration
@@ -249,22 +248,29 @@ class SchedulingService:
         gera uma lista de dicionários: [{"start": datetime, "end": datetime}, ...]
         respeitando o fuso 'America/Sao_Paulo' e distinguindo eventos day-long.
         """
-        calendar_id = integration_conf["google_calendar_id"]
-        if not calendar_id:
-            logger.warning("[SchedulingService] google_calendar_id vazio ou None.")
+        agenda_id = integration_conf.get("agenda_id")
+        if not agenda_id:
             return []
 
-        integration = self.db.query(CalendarIntegration).filter(
-            CalendarIntegration.company_id == self.company_id,
-            CalendarIntegration.provider == "google",
+        agenda = self.db.query(Agenda).filter(
+            Agenda.id == agenda_id,
+            Agenda.company_id == self.company_id,
         ).first()
-        if not integration or not integration.google_oauth_token:
-            logger.warning("[SchedulingService] Google Agenda sem OAuth conectado.")
+        if not agenda:
             return []
 
-        service = build_google_oauth_service(integration, self.db)
+        from backend.services.google_credencial import (
+            build_service_da_agenda,
+            calendar_id_da_agenda,
+        )
+
+        calendar_id = calendar_id_da_agenda(self.db, self.company_id, agenda)
+        if not calendar_id:
+            return []
+
+        service, _fonte = build_service_da_agenda(self.db, self.company_id, agenda)
         if not service:
-            logger.error("[SchedulingService] Não foi possível obter service do Google Calendar.")
+            logger.info("[SchedulingService] Google OAuth not connected for agenda=%s", agenda_id)
             return []
 
         # Período de captura (amanhã até +7 dias)

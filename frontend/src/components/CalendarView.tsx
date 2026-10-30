@@ -8,6 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import { formatInTimeZone } from 'date-fns-tz';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Lock } from 'lucide-react';
 import AppointmentBookingModal from './AppointmentBookingModal.tsx';
+import { listarEventosGoogleDaAgenda, type GoogleAgendaEvento } from '../services/googleAgendaApi.ts';
 
 interface Agendamento {
     id: number;
@@ -124,6 +125,7 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
     const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+    const [eventosGoogle, setEventosGoogle] = useState<GoogleAgendaEvento[]>([]);
 
     // Modal states
     const [showModal, setShowModal] = useState(false);
@@ -195,6 +197,20 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
             setAgendamentos(response.data);
         } catch (error) {
             console.error("[CalendarView] Failed to fetch appointments", error);
+        }
+
+        // Compromissos do Google do profissional: ocupam o horário na agenda.
+        try {
+            const google = await listarEventosGoogleDaAgenda(
+                selectedAgendaId,
+                startDate.toISOString(),
+                endDate.toISOString(),
+                companyId,
+            );
+            setEventosGoogle(google.events);
+        } catch (error) {
+            console.warn("[CalendarView] Failed to fetch Google events", error);
+            setEventosGoogle([]);
         }
     };
 
@@ -383,7 +399,19 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                     );
                                     return apptString === slotDateTimeKey;
                                 });
-                                const canCreateAppointment = !appointment && !isPastSlot && isConfiguredSlot;
+                                const slotEndKey = format(new Date(slotDate.getTime() + duration * 60000), DATE_TIME_KEY_FORMAT);
+                                const eventosDoSlot = eventosGoogle.filter(ev => {
+                                    const evStart = formatIsoInTimezone(ev.start, selectedAgenda.timezone, DATE_TIME_KEY_FORMAT);
+                                    const evEnd = formatIsoInTimezone(ev.end, selectedAgenda.timezone, DATE_TIME_KEY_FORMAT);
+                                    return evStart !== '' && evStart < slotEndKey && evEnd > slotDateTimeKey;
+                                });
+                                const googleEvent = eventosDoSlot[0];
+                                const googleStartsHere = Boolean(googleEvent) && formatIsoInTimezone(
+                                    googleEvent.start,
+                                    selectedAgenda.timezone,
+                                    DATE_TIME_KEY_FORMAT,
+                                ) >= slotDateTimeKey;
+                                const canCreateAppointment = !appointment && !googleEvent && !isPastSlot && isConfiguredSlot;
 
                                 return (
                                     <div
@@ -392,7 +420,9 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                         title={
                                             appointment
                                                 ? undefined
-                                                : isPastSlot
+                                                : googleEvent
+                                                    ? `Google Agenda: ${googleEvent.summary}`
+                                                    : isPastSlot
                                                     ? 'Horário passado'
                                                     : !isConfiguredSlot
                                                         ? 'Fora da janela de atendimento'
@@ -401,7 +431,9 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                         className={`relative min-w-[132px] flex-1 border-r border-brand/10 transition-colors ${
                                             appointment
                                                 ? 'cursor-default'
-                                                : isPastSlot
+                                                : googleEvent
+                                                    ? 'cursor-not-allowed'
+                                                    : isPastSlot
                                                     ? 'cursor-not-allowed bg-[repeating-linear-gradient(135deg,rgba(17,17,17,0.035)_0,rgba(17,17,17,0.035)_8px,transparent_8px,transparent_16px)]'
                                                     : !isConfiguredSlot
                                                         ? 'cursor-not-allowed bg-brand-canvas/35'
@@ -417,7 +449,19 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                                 </div>
                                             </div>
                                         )}
-                                        {isPastSlot && !appointment && (
+                                        {googleEvent && !appointment && (
+                                            <div className="absolute inset-1 overflow-hidden rounded-xl border border-sky-200 bg-sky-50 text-xs text-sky-900 shadow-sm">
+                                                <div className="h-full border-l-4 border-sky-400 p-2">
+                                                    {googleStartsHere && (
+                                                        <>
+                                                            <div className="truncate font-semibold">{googleEvent.summary}</div>
+                                                            <div className="truncate text-sky-700/70">Google Agenda</div>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                        {isPastSlot && !appointment && !googleEvent && (
                                             <div className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-brand/10 bg-white/80 text-brand/25">
                                                 <Lock className="h-3 w-3" />
                                             </div>

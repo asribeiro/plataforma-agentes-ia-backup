@@ -2,8 +2,8 @@ import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Calendar as CalendarIcon, Clock, Link2 } from 'lucide-react';
 import { CalendarConfig } from '../components/CalendarConfig.tsx';
+import GoogleAgendaProfissionais from './GoogleAgendaProfissionais.tsx';
 import { CalendarView } from '../components/CalendarView.tsx';
-import AgendaIntegration from './AgendaIntegration.tsx';
 import { useTheme } from '../contexts/ThemeContext.tsx';
 
 type AgendaTab = 'calendar' | 'hours' | 'integrations';
@@ -16,7 +16,7 @@ const tabs: Array<{
 }> = [
     { id: 'calendar', label: 'Calendário', description: 'Dia e semana', icon: CalendarIcon },
     { id: 'hours', label: 'Agendas por profissional', description: 'Turnos, duração e fuso', icon: Clock },
-    { id: 'integrations', label: 'Integrações', description: 'Google e conectores', icon: Link2 },
+    { id: 'integrations', label: 'Integrações', description: 'Google por profissional', icon: Link2 },
 ];
 
 const normalizeTab = (tab: string | null): AgendaTab => {
@@ -29,7 +29,9 @@ const CalendarConfigPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     // OAuth POR AGENDA volta com &agenda_id=…: o lugar certo é a aba do editor
     // de agendas, não Integrações — senão a pessoa nunca vê o card da agenda.
-    const voltandoDoOAuthDaAgenda = Boolean(searchParams.get('agenda_id') && searchParams.get('google_oauth'));
+    const voltandoDoOAuthDaAgenda = Boolean(
+        searchParams.get('agenda_id') && searchParams.get('google_oauth') && searchParams.get('tab') !== 'integrations',
+    );
     const activeTab = voltandoDoOAuthDaAgenda ? 'hours' : normalizeTab(searchParams.get('tab'));
 
     const setActiveTab = (tab: AgendaTab) => {
@@ -116,7 +118,7 @@ const CalendarConfigPage: React.FC = () => {
                 <div className="min-w-0">
                     {activeTab === 'calendar' && <CalendarView />}
                     {activeTab === 'hours' && <CalendarConfig />}
-                    {activeTab === 'integrations' && <AgendaIntegration embedded />}
+                    {activeTab === 'integrations' && <GoogleAgendaProfissionais embedded />}
                 </div>
             </div>
         </div>
