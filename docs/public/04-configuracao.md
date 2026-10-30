@@ -159,6 +159,17 @@ Em desenvolvimento, use os valores locais de `.env.development.example`. Reinici
 
 Nunca coloque o Client Secret em variáveis `VITE_*`, no frontend ou em mensagens. Não compartilhe arquivos `.env` nem tokens OAuth.
 
+## Cadastro de empresas clientes
+
+Administradores da plataforma podem abrir **Clientes da plataforma → Nova empresa cliente**.
+O cadastro é dividido em seções, permite salvar rascunhos e mostra um resumo antes da
+criação definitiva. Rascunhos ficam visíveis somente para administradores da plataforma.
+
+O plano **Redes de Clínicas** começa com limite de 30 unidades. Esse limite é independente
+do limite de profissionais dos demais planos e só pode ser alterado por um administrador
+da plataforma. A lista de convênios, horários, responsáveis e dados de cobrança pode ser
+editada posteriormente na configuração da empresa.
+
 ## Outras integrações opcionais
 
 Configure apenas as integrações que usar:

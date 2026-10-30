@@ -96,6 +96,7 @@ import {
   type StatusFatura,
 } from '../services/cobrancaApi.ts';
 import { formatarPreco } from '../services/clinicApi.ts';
+import { companyRegistrationApi, type CompanyRegistrationDraft } from '../services/companyRegistrationApi.ts';
 
 // --------------------------------------------------------------------------
 // Formatação
@@ -197,7 +198,9 @@ interface EmpresaCardProps {
   onEntrar: () => void;
   onEscolher: (tier: ModalidadeTier | '') => void;
   onSalvar: () => void;
+  onSalvarLimiteRede: (limite: number) => void;
   salvando: boolean;
+  salvandoLimiteRede: boolean;
   selecao: ModalidadeTier | '';
 }
 
@@ -210,13 +213,16 @@ const EmpresaCard: React.FC<EmpresaCardProps> = ({
   onEntrar,
   onEscolher,
   onSalvar,
+  onSalvarLimiteRede,
   salvando,
+  salvandoLimiteRede,
   selecao,
 }) => {
   const nome = nomeDaEmpresa(empresa);
   const cnpj = formatarCnpj(empresa.cnpj);
   const tierAtual = tierValido(empresa.professional_tier);
   const mudou = selecao !== '' && selecao !== tierAtual;
+  const [limiteRede, setLimiteRede] = useState(String(empresa.network_unit_limit || 30));
   const selectId = `modalidade-empresa-${empresa.id}`;
   const mutedClass = isDark ? 'text-white/55' : 'text-brand/55';
   const faintClass = isDark ? 'text-white/40' : 'text-brand/45';
@@ -255,8 +261,11 @@ const EmpresaCard: React.FC<EmpresaCardProps> = ({
             <p className={`mt-1 text-xs ${mutedClass}`}>
               {cnpj ? `CNPJ ${cnpj}` : 'CNPJ não informado'}
               {' · '}
-              limite de {numeroFormatado(empresa.max_professionals)}{' '}
-              {empresa.max_professionals === 1 ? 'profissional' : 'profissionais'}
+              {empresa.professional_tier === 'network'
+                ? `${numeroFormatado(empresa.network_units_used)} de ${numeroFormatado(empresa.network_unit_limit || 30)} unidades`
+                : `limite de ${numeroFormatado(empresa.max_professionals)} ${
+                  empresa.max_professionals === 1 ? 'profissional' : 'profissionais'
+                }`}
             </p>
           </div>
         </div>
@@ -367,6 +376,35 @@ const EmpresaCard: React.FC<EmpresaCardProps> = ({
               {numeroFormatado(empresa.max_professionals)} permitido(s).
             </p>
           </div>
+
+          {empresa.professional_tier === 'network' && (
+            <div className={`mt-4 rounded-2xl border p-3 ${borderClass} ${softClass}`}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <label className={agentiveLabelClass(isDark)}>Limite de unidades da rede</label>
+                  <input
+                    type="number"
+                    min={empresa.network_units_used || 1}
+                    value={limiteRede}
+                    onChange={(event) => setLimiteRede(event.target.value)}
+                    className={agentiveInputClass(isDark)}
+                  />
+                  <p className={`mt-1.5 text-xs ${faintClass}`}>
+                    {numeroFormatado(empresa.network_units_used)} unidade(s) usada(s). Somente admins da plataforma podem alterar.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onSalvarLimiteRede(Number(limiteRede))}
+                  disabled={salvandoLimiteRede || Number(limiteRede) === Number(empresa.network_unit_limit || 30)}
+                  className={agentivePrimaryButtonClass('shrink-0')}
+                >
+                  {salvandoLimiteRede ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  Salvar limite
+                </button>
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={onSalvar}
@@ -397,10 +435,12 @@ const Plataforma: React.FC = () => {
   const [semPermissao, setSemPermissao] = useState(false);
   const [motivoSemPermissao, setMotivoSemPermissao] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [rascunhos, setRascunhos] = useState<CompanyRegistrationDraft[]>([]);
 
   /** Seleção de modalidade por empresa (ainda não salva). */
   const [selecoes, setSelecoes] = useState<Record<number, ModalidadeTier | ''>>({});
   const [salvandoId, setSalvandoId] = useState<number | null>(null);
+  const [salvandoLimiteRedeId, setSalvandoLimiteRedeId] = useState<number | null>(null);
 
   const [empresaParaEntrar, setEmpresaParaEntrar] = useState<EmpresaDaPlataforma | null>(null);
   const [entrando, setEntrando] = useState(false);
@@ -480,6 +520,13 @@ const Plataforma: React.FC = () => {
     try {
       const dados = await adminPlataformaApi.listarEmpresas();
       setPainel(dados);
+      try {
+        setRascunhos(await companyRegistrationApi.listDrafts());
+      } catch {
+        // A lista principal continua disponível se a migration de rascunhos
+        // ainda não estiver aplicada neste ambiente.
+        setRascunhos([]);
+      }
       const inicial: Record<number, ModalidadeTier | ''> = {};
       dados.empresas.forEach((empresa) => {
         inicial[empresa.id] = tierValido(empresa.professional_tier) ?? '';
@@ -531,6 +578,7 @@ const Plataforma: React.FC = () => {
               }
             : prev,
         );
+
         toast.success(
           `${nomeDaEmpresa(empresa)}: modalidade agora é ${atualizada.rotulo} (limite de ${numeroFormatado(
             atualizada.max_professionals,
@@ -558,6 +606,24 @@ const Plataforma: React.FC = () => {
     },
     [],
   );
+
+  const salvarLimiteRede = useCallback(async (empresa: EmpresaDaPlataforma, limite: number) => {
+    setSalvandoLimiteRedeId(empresa.id);
+    try {
+      const atualizado = await adminPlataformaApi.atualizarLimiteUnidadesRede(empresa.id, limite);
+      setPainel((prev) => prev ? {
+        ...prev,
+        empresas: prev.empresas.map((item) => item.id === empresa.id
+          ? { ...item, network_unit_limit: atualizado.limite, network_units_used: atualizado.unidades_utilizadas }
+          : item),
+      } : prev);
+      toast.success('Limite de unidades atualizado.');
+    } catch (e) {
+      toast.error(mensagemDeErro(e));
+    } finally {
+      setSalvandoLimiteRedeId(null);
+    }
+  }, []);
 
   const entrarNaEmpresa = useCallback(async (empresa: EmpresaDaPlataforma) => {
     setEntrando(true);
@@ -836,6 +902,35 @@ const Plataforma: React.FC = () => {
           />
         )}
 
+        {!semPermissao && rascunhos.length > 0 && (
+          <section className={agentivePanelClass(isDark, 'p-4 sm:p-5')}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold">Rascunhos de empresas</h2>
+                <p className="mt-1 text-xs text-brand/55 dark:text-white/55">
+                  Visíveis somente para administradores da plataforma.
+                </p>
+              </div>
+              <span className={agentivePillClass(isDark, false)}>{rascunhos.length}</span>
+            </div>
+            <div className="mt-3 grid gap-2">
+              {rascunhos.map((draft) => (
+                <button
+                  key={draft.id}
+                  type="button"
+                  onClick={() => navigate(`/new-company-admin?draftId=${draft.id}`)}
+                  className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-sm ${
+                    isDark ? 'border-white/10 hover:bg-white/5' : 'border-brand/10 hover:bg-brand-canvas'
+                  }`}
+                >
+                  <span>{draft.payload.trade_name || draft.payload.legal_name || `Rascunho #${draft.id}`}</span>
+                  <span className="text-xs opacity-60">Editar rascunho #{draft.id}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         {!semPermissao && !erro && empresas.length > 0 && (
           <div className="flex flex-col gap-4">
             {empresas.map((empresa) => (
@@ -873,6 +968,8 @@ const Plataforma: React.FC = () => {
                   const tier = selecoes[empresa.id];
                   if (tier) salvarModalidade(empresa, tier);
                 }}
+                onSalvarLimiteRede={(limite) => salvarLimiteRede(empresa, limite)}
+                salvandoLimiteRede={salvandoLimiteRedeId === empresa.id}
                 onEntrar={() => setEmpresaParaEntrar(empresa)}
                 onAbrirConfiguracao={(acao) => pedirConfiguracao(empresa, acao)}
               />

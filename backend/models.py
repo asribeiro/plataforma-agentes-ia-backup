@@ -81,6 +81,40 @@ class Company(Base):
     max_professionals = Column(
         Integer, nullable=False, server_default=text("1"), default=1
     )
+    network_unit_limit = Column(
+        Integer, nullable=True, server_default=text("30")
+    )
+
+    # Cadastro comercial e operacional da empresa cliente.
+    person_type = Column(String(2), nullable=False, server_default=text("'PJ'"))
+    municipal_registration = Column(String(40), nullable=True)
+    postal_code = Column(String(8), nullable=True)
+    address = Column(String(255), nullable=True)
+    address_number = Column(String(30), nullable=True)
+    address_complement = Column(String(120), nullable=True)
+    province = Column(String(120), nullable=True)
+    city = Column(String(120), nullable=True)
+    state = Column(String(2), nullable=True)
+    fixed_phone = Column(String(30), nullable=True)
+    website = Column(String(255), nullable=True)
+    instagram = Column(String(255), nullable=True)
+    ai_whatsapp = Column(String(30), nullable=True)
+    accepts_insurance = Column(Boolean, nullable=False, server_default=text("false"))
+    accepted_insurance = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    business_hours = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    administrative_responsible_name = Column(String(255), nullable=True)
+    administrative_responsible_email = Column(String(255), nullable=True)
+    administrative_responsible_phone = Column(String(30), nullable=True)
+    technical_responsible_professional_id = Column(
+        Integer, ForeignKey("professionals.id", ondelete="SET NULL"), nullable=True
+    )
+    technical_responsible_cro = Column(String(30), nullable=True)
+    technical_responsible_cro_uf = Column(String(2), nullable=True)
+    billing_email = Column(String(255), nullable=True)
+    preferred_payment_method = Column(String(40), nullable=True)
+    billing_interval = Column(String(20), nullable=False, server_default=text("'monthly'"))
+    is_founder_customer = Column(Boolean, nullable=False, server_default=text("false"))
+    registration_started_at = Column(TIMESTAMP(timezone=True), nullable=True)
 
     agent_workforces = relationship("AgentWorkforce", back_populates="company", cascade="all, delete-orphan")
     calendar_integrations = relationship("CalendarIntegration", back_populates="company")
@@ -134,6 +168,55 @@ class ClientCompany(Base):
     # Relacionamentos
     client = relationship("Client", back_populates="companies")
     company = relationship("Company", back_populates="clients_association")  # Podemos criar algo como 'clients_association' no model Company
+
+
+class CompanyRegistrationDraft(Base):
+    __tablename__ = "company_registration_drafts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_by_client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    payload = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    logo_url = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, server_default=text("'draft'"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    completed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    completed_company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="SET NULL"), nullable=True)
+
+    created_by_client = relationship("Client", foreign_keys=[created_by_client_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    completed_company = relationship("Company", foreign_keys=[completed_company_id])
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft','created','cancelled')",
+            name="ck_company_registration_draft_status",
+        ),
+        Index("idx_company_registration_drafts_status", "status"),
+    )
+
+
+class CompanyAuditEvent(Base):
+    __tablename__ = "company_audit_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    company_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    actor_client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
+    actor_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action = Column(String(50), nullable=False)
+    before_data = Column(JSONB, nullable=True)
+    after_data = Column(JSONB, nullable=True)
+    metadata_json = Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    company = relationship("Company", foreign_keys=[company_id])
+    actor_client = relationship("Client", foreign_keys=[actor_client_id])
+    actor_user = relationship("User", foreign_keys=[actor_user_id])
+
+    __table_args__ = (
+        Index("idx_company_audit_events_company_created", "company_id", "created_at"),
+    )
 
 
 class CustomerManagedCompany(Base):

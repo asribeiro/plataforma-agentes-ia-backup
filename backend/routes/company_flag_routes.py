@@ -36,13 +36,14 @@ router = APIRouter(prefix="/api/company", tags=["company"])
 
 # Uma modalidade, um limite. O limite e derivado do tier na escrita e lido
 # direto da coluna na leitura: se a faixa comercial mudar, muda so este mapa.
-LIMITE_POR_TIER = {"mono": 1, "up_to_4": 4, "up_to_10": 10}
-TIER_POR_LIMITE = {1: "mono", 4: "up_to_4", 10: "up_to_10"}
+LIMITE_POR_TIER = {"mono": 1, "up_to_4": 4, "up_to_10": 10, "network": 30}
+TIER_POR_LIMITE = {1: "mono", 4: "up_to_4", 10: "up_to_10", 30: "network"}
 
 ROTULO_TIER = {
     "mono": "Monoprofissional (1 profissional)",
     "up_to_4": "Clinica pequena (1 a 4 profissionais)",
     "up_to_10": "Clinica media (5 a 10 profissionais)",
+    "network": "Redes de Clínicas (até 30 unidades)",
 }
 
 

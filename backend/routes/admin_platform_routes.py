@@ -24,7 +24,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -36,6 +36,7 @@ from backend.models import (
     Client,
     ClientCompany,
     Company,
+    CustomerManagedCompany,
     Professional,
     User,
 )
@@ -69,12 +70,25 @@ class EmpresaDoPainel(BaseModel):
     agendamentos_total: int
     vinculada_ao_meu_login: bool
     empresa_atual: bool
+    network_unit_limit: Optional[int] = None
+    network_units_used: int = 0
 
 
 class PainelOut(BaseModel):
     total_empresas: int
     empresa_atual_id: Optional[int] = None
     empresas: list[EmpresaDoPainel]
+
+
+class LimiteUnidadesRedeIn(BaseModel):
+    limite: int = Field(ge=1, le=100000)
+
+
+class LimiteUnidadesRedeOut(BaseModel):
+    company_id: int
+    limite: int
+    unidades_utilizadas: int
+    unidades_disponiveis: int
 
 
 def _contagens(db: Session) -> dict:
@@ -114,6 +128,11 @@ def _contagens(db: Session) -> dict:
             db.query(Agenda.company_id, func.count(Agendamento.id))
             .join(Agendamento, Agendamento.agenda_id == Agenda.id)
             .group_by(Agenda.company_id)
+        ),
+        "network_units": por_empresa(
+            db.query(CustomerManagedCompany.owner_company_id, func.count(CustomerManagedCompany.id))
+            .filter(CustomerManagedCompany.lifecycle_status.in_(("active", "trialing")))
+            .group_by(CustomerManagedCompany.owner_company_id)
         ),
     }
 
@@ -169,6 +188,8 @@ def listar_empresas(
                 agendamentos_total=c["agendamentos"].get(eid, 0),
                 vinculada_ao_meu_login=eid in meus_vinculos,
                 empresa_atual=(eid == atual),
+                network_unit_limit=int(e.network_unit_limit) if e.network_unit_limit is not None else None,
+                network_units_used=c["network_units"].get(eid, 0),
             )
         )
 
@@ -238,6 +259,65 @@ def entrar_na_empresa(
             "Recarregue para ver os dados desta empresa."
         ),
     }
+
+
+@router.get("/companies/{company_id}/network-limit", response_model=LimiteUnidadesRedeOut)
+def ler_limite_unidades_rede(
+    company_id: int,
+    db: Session = Depends(get_db),
+    usuario=Depends(require_internal_admin),
+):
+    empresa = db.query(Company).filter(Company.id == company_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    utilizadas = (
+        db.query(CustomerManagedCompany)
+        .filter(
+            CustomerManagedCompany.owner_company_id == company_id,
+            CustomerManagedCompany.lifecycle_status.in_(("active", "trialing")),
+        )
+        .count()
+    )
+    limite = int(empresa.network_unit_limit or 30)
+    return LimiteUnidadesRedeOut(
+        company_id=company_id,
+        limite=limite,
+        unidades_utilizadas=utilizadas,
+        unidades_disponiveis=max(0, limite - utilizadas),
+    )
+
+
+@router.put("/companies/{company_id}/network-limit", response_model=LimiteUnidadesRedeOut)
+def atualizar_limite_unidades_rede(
+    company_id: int,
+    dados: LimiteUnidadesRedeIn,
+    db: Session = Depends(get_db),
+    usuario=Depends(require_internal_admin),
+):
+    empresa = db.query(Company).filter(Company.id == company_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+    utilizadas = (
+        db.query(CustomerManagedCompany)
+        .filter(
+            CustomerManagedCompany.owner_company_id == company_id,
+            CustomerManagedCompany.lifecycle_status.in_(("active", "trialing")),
+        )
+        .count()
+    )
+    if dados.limite < utilizadas:
+        raise HTTPException(
+            status_code=409,
+            detail=f"O limite não pode ser menor que as {utilizadas} unidades já cadastradas.",
+        )
+    empresa.network_unit_limit = dados.limite
+    db.commit()
+    return LimiteUnidadesRedeOut(
+        company_id=company_id,
+        limite=dados.limite,
+        unidades_utilizadas=utilizadas,
+        unidades_disponiveis=dados.limite - utilizadas,
+    )
 
 
 @router.put("/companies/{company_id}/modalidade", response_model=ModalidadeOut)

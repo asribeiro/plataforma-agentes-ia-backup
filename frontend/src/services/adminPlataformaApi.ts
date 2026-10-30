@@ -21,7 +21,7 @@ import { api } from './api.ts';
 // --------------------------------------------------------------------------
 // Tipos — espelham os schemas do backend
 // --------------------------------------------------------------------------
-export type ModalidadeTier = 'mono' | 'up_to_4' | 'up_to_10';
+export type ModalidadeTier = 'mono' | 'up_to_4' | 'up_to_10' | 'network';
 
 export interface SouAdminPlataforma {
   admin_plataforma: boolean;
@@ -49,6 +49,8 @@ export interface EmpresaDaPlataforma {
   vinculada_ao_meu_login: boolean;
   /** É a empresa em que a sessão está agora. */
   empresa_atual: boolean;
+  network_unit_limit?: number | null;
+  network_units_used?: number;
 }
 
 export interface PainelPlataforma {
@@ -76,17 +78,25 @@ export interface ModalidadeEmpresa {
   orientacao: string;
 }
 
+export interface LimiteUnidadesRede {
+  company_id: number;
+  limite: number;
+  unidades_utilizadas: number;
+  unidades_disponiveis: number;
+}
+
 /** As três faixas comerciais. O limite é a regra de negócio de cada uma. */
 export const MODALIDADES: { tier: ModalidadeTier; rotulo: string; limite: number }[] = [
   { tier: 'mono', rotulo: 'Monoprofissional — 1 profissional', limite: 1 },
   { tier: 'up_to_4', rotulo: 'Até 4 profissionais', limite: 4 },
   { tier: 'up_to_10', rotulo: 'Até 10 profissionais', limite: 10 },
+  { tier: 'network', rotulo: 'Redes de Clínicas — até 30 unidades', limite: 30 },
 ];
 
 /** Tier vindo do banco como string: devolve o tipo só quando é um dos três. */
 export function tierValido(valor: string | null | undefined): ModalidadeTier | null {
   const normalizado = (valor || '').trim().toLowerCase();
-  if (normalizado === 'mono' || normalizado === 'up_to_4' || normalizado === 'up_to_10') {
+  if (normalizado === 'mono' || normalizado === 'up_to_4' || normalizado === 'up_to_10' || normalizado === 'network') {
     return normalizado;
   }
   return null;
@@ -200,6 +210,16 @@ export const adminPlataformaApi = {
       professional_tier: tier,
       confirmar,
     });
+    return r.data;
+  },
+
+  async lerLimiteUnidadesRede(companyId: number): Promise<LimiteUnidadesRede> {
+    const r = await api.get(`/api/admin/companies/${companyId}/network-limit`);
+    return r.data;
+  },
+
+  async atualizarLimiteUnidadesRede(companyId: number, limite: number): Promise<LimiteUnidadesRede> {
+    const r = await api.put(`/api/admin/companies/${companyId}/network-limit`, { limite });
     return r.data;
   },
 };

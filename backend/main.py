@@ -1,6 +1,7 @@
 from backend.routes import services_routes
 from backend.routes import professionals_routes
 from backend.routes import company_flag_routes
+from backend.routes.company_registration_routes import router as company_registration_router
 # backend/main.py
 import os
 import secrets
@@ -382,6 +383,7 @@ from backend.routes.tags import router as tags_router
 app.include_router(tags_router, prefix="/webhook", tags=["tags"])
 
 app.include_router(company.router, prefix="/api", tags=["company"])
+app.include_router(company_registration_router)
 app.include_router(account_profile_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api/integrations/calendar", tags=["calendar_integration"])
 app.include_router(support_group_router, prefix="/api/integrations/support-group", tags=["support_group_integration"])
