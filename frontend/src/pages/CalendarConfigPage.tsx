@@ -27,7 +27,10 @@ const normalizeTab = (tab: string | null): AgendaTab => {
 const CalendarConfigPage: React.FC = () => {
     const { isDark } = useTheme();
     const [searchParams, setSearchParams] = useSearchParams();
-    const activeTab = normalizeTab(searchParams.get('tab'));
+    // OAuth POR AGENDA volta com &agenda_id=…: o lugar certo é a aba do editor
+    // de agendas, não Integrações — senão a pessoa nunca vê o card da agenda.
+    const voltandoDoOAuthDaAgenda = Boolean(searchParams.get('agenda_id') && searchParams.get('google_oauth'));
+    const activeTab = voltandoDoOAuthDaAgenda ? 'hours' : normalizeTab(searchParams.get('tab'));
 
     const setActiveTab = (tab: AgendaTab) => {
         const nextParams = new URLSearchParams(searchParams);

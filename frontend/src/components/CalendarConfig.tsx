@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
     CalendarClock,
     CalendarDays,
@@ -40,6 +42,8 @@ import {
     agentivePrimaryButtonClass,
     agentiveSecondaryButtonClass,
 } from './AgentiveUI.tsx';
+import { AgendaGoogleCalendarCard } from './AgendaGoogleCalendarCard.tsx';
+import type { GoogleAgendaFonteCredencial, GoogleAgendaStatus } from '../services/googleAgendaApi.ts';
 
 /**
  * Agenda POR PROFISSIONAL (F1-11).
@@ -300,6 +304,18 @@ const validarFormulario = (form: FormState): string | null => {
 
 export const CalendarConfig: React.FC = () => {
     const { isDark } = useTheme();
+    const [, setSearchParams] = useSearchParams();
+
+    // --- retorno do OAuth POR AGENDA (?google_oauth=success&agenda_id=N)
+    const [oauthAgendaId] = useState<number | null>(() => {
+        if (typeof window === 'undefined') return null;
+        const bruto = new URLSearchParams(window.location.search).get('agenda_id');
+        if (!bruto) return null;
+        const numero = Number(bruto);
+        return Number.isFinite(numero) && numero > 0 ? numero : null;
+    });
+    const [googleRecemConectado, setGoogleRecemConectado] = useState(false);
+    const retornoOauthTratado = useRef(false);
 
     // --- profissionais (a primeira escolha da tela)
     const [profissionais, setProfissionais] = useState<Profissional[]>([]);
@@ -332,6 +348,8 @@ export const CalendarConfig: React.FC = () => {
     const [isCreatingGoogleCalendar, setIsCreatingGoogleCalendar] = useState(false);
     const [newGoogleCalendarName, setNewGoogleCalendarName] = useState('');
     const [agendaToUnlink, setAgendaToUnlink] = useState<Agenda | null>(null);
+    // Fonte da credencial Google da agenda aberta, informada pelo card da agenda.
+    const [fonteGoogleDaAgenda, setFonteGoogleDaAgenda] = useState<GoogleAgendaFonteCredencial>(null);
 
     const mutedClass = isDark ? 'text-white/55' : 'text-brand/55';
     const eyebrowClass = `text-[10px] font-bold uppercase tracking-[0.16em] ${isDark ? 'text-white/35' : 'text-brand/35'}`;
@@ -418,6 +436,7 @@ export const CalendarConfig: React.FC = () => {
             setCarregandoAgenda(false);
             setForm(formVazio());
             setSlots([]);
+            setFonteGoogleDaAgenda(null);
             return;
         }
 
@@ -427,6 +446,7 @@ export const CalendarConfig: React.FC = () => {
         setBanner(null);
         setSlots([]);
         setErroSlots(null);
+        setFonteGoogleDaAgenda(null);
 
         calendarApi
             .listAgendas({ professional_id: profissionalSelecionado, incluir_inativas: true })
@@ -478,6 +498,60 @@ export const CalendarConfig: React.FC = () => {
     useEffect(() => {
         carregarGoogle();
     }, [carregarGoogle]);
+
+    // O backend devolve a pessoa em /prompt/agenda?google_oauth=…&agenda_id=N e o
+    // App redireciona para cá. Aqui só avisamos e limpamos a URL; quem pinta o
+    // estado é o status da agenda (nunca o parâmetro da URL).
+    useEffect(() => {
+        if (retornoOauthTratado.current) return;
+        const params = new URLSearchParams(window.location.search);
+        const resultado = params.get('google_oauth');
+        if (!resultado) return;
+        retornoOauthTratado.current = true;
+
+        if (resultado === 'success') {
+            // Só o fluxo POR AGENDA volta com agenda_id; sem ele o sucesso é da
+            // empresa e quem responde é a aba Integrações.
+            if (!params.get('agenda_id')) {
+                const semAgenda = new URLSearchParams(params);
+                semAgenda.delete('google_oauth');
+                semAgenda.delete('reason');
+                setSearchParams(semAgenda, { replace: true });
+                return;
+            }
+            setGoogleRecemConectado(true);
+            toast.success('Google conectado para esta agenda. Confirme o calendário dela abaixo.');
+        } else {
+            toast.error('Não foi possível concluir a autorização do Google desta agenda. Tente conectar de novo.');
+        }
+
+        const restantes = new URLSearchParams(params);
+        const tinhaAgenda = Boolean(restantes.get('agenda_id'));
+        restantes.delete('google_oauth');
+        restantes.delete('agenda_id');
+        restantes.delete('reason');
+        // Fecha o ciclo na aba do editor de agendas: o redirect do backend cai em
+        // ?tab=integrations&agenda_id=…, e sem isto a tela trocaria de aba ao limpar a URL.
+        if (tinhaAgenda) restantes.set('tab', 'hours');
+        setSearchParams(restantes, { replace: true });
+    }, [setSearchParams]);
+
+    // Depois do OAuth a agenda autorizada pode não ser a do profissional já
+    // selecionado: seleciona o dono dela para o card aparecer aberto.
+    useEffect(() => {
+        if (!oauthAgendaId) return;
+        const entrada = Object.entries(agendasPorProfissional).find(([, lista]) =>
+            lista.some((item) => item.id === oauthAgendaId)
+        );
+        if (!entrada) return;
+        const donoId = Number(entrada[0]);
+        if (!profissionais.some((profissional) => profissional.id === donoId)) return;
+        setProfissionalSelecionado((atual) => (atual === donoId ? atual : donoId));
+    }, [oauthAgendaId, agendasPorProfissional, profissionais]);
+
+    const aoCarregarStatusGoogle = useCallback((dados: GoogleAgendaStatus) => {
+        setFonteGoogleDaAgenda(dados.fonte_credencial ?? null);
+    }, []);
 
     // -----------------------------------------------------------------------
     // Edição do formulário
@@ -621,6 +695,19 @@ export const CalendarConfig: React.FC = () => {
             } catch {
                 /* mantém o que está na tela */
             }
+        }
+    };
+
+    // O card do Google mexe em campos da agenda (calendar id/summary). Recarrega
+    // apenas o objeto `agenda` para não apagar edições não salvas do formulário.
+    const recarregarAgendaDoCardGoogle = async () => {
+        await carregarMapaDeAgendas();
+        if (!agenda) return;
+        try {
+            const atualizada = await calendarApi.getAgenda(agenda.id);
+            setAgenda(atualizada);
+        } catch {
+            /* mantém o que está na tela */
         }
     };
 
@@ -1149,11 +1236,12 @@ export const CalendarConfig: React.FC = () => {
                                 </dl>
 
                                 <p className={`mt-3 text-xs leading-relaxed ${mutedClass}`}>
-                                    Hoje a credencial é <strong>da empresa</strong>: a conta Google conectada em Integrações atende as agendas da clínica.
-                                    A credencial por profissional é o card <strong>F1-06</strong> — esta tela não edita esses campos.
+                                    Estes campos são preenchidos pelo backend quando a agenda é ligada a um calendário Google.
+                                    Quem autorizou a conta Google — o profissional ou a clínica — é o que o card
+                                    {' '}<strong>Google Calendar desta agenda</strong>, logo abaixo, mostra e edita.
                                 </p>
 
-                                {agenda && (
+                                {agenda && fonteGoogleDaAgenda !== 'agenda' && (
                                     <div className="mt-3 flex flex-wrap items-center gap-2">
                                         {agenda.google_calendar_id ? (
                                             <button type="button" onClick={() => setAgendaToUnlink(agenda)} disabled={salvando} className={agentiveSecondaryButtonClass(isDark, 'py-1.5 text-xs')}>
@@ -1177,7 +1265,29 @@ export const CalendarConfig: React.FC = () => {
                                         )}
                                     </div>
                                 )}
+                                {agenda && fonteGoogleDaAgenda === 'agenda' && (
+                                    <p className={`mt-3 text-xs leading-relaxed ${mutedClass}`}>
+                                        Esta agenda tem conta Google própria: o vínculo com o calendário é escolhido no card abaixo, na conta
+                                        do profissional — a lista da conta da clínica não vale para ela.
+                                    </p>
+                                )}
                             </div>
+
+                            {/* Google Calendar da AGENDA (OAuth por profissional) */}
+                            {agenda ? (
+                                <AgendaGoogleCalendarCard
+                                    agendaId={agenda.id}
+                                    agendaNome={agenda.name}
+                                    onAlterado={recarregarAgendaDoCardGoogle}
+                                    onStatusCarregado={aoCarregarStatusGoogle}
+                                    recemConectado={googleRecemConectado && oauthAgendaId === agenda.id}
+                                />
+                            ) : (
+                                <div className={`mt-6 rounded-2xl border border-dashed p-4 text-xs leading-relaxed ${cardBorderClass} ${mutedClass}`}>
+                                    O Google desta agenda aparece depois que ela existir: crie a agenda acima e volte aqui para autorizar a conta
+                                    Google do profissional.
+                                </div>
+                            )}
 
                             {/* Prévia de horários */}
                             <div className={`mt-6 overflow-hidden rounded-2xl border ${cardBorderClass}`}>
