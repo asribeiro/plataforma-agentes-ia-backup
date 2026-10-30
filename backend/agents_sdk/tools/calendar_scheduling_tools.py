@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Annotated, Any, Dict, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -39,6 +39,150 @@ CALENDAR_SCHEDULING_ACTIONS = {
 }
 
 
+def _criar_tarefas_de_lembrete(
+    db: Session,
+    company_id: int,
+    appointment: Any,
+    agenda: Any,
+    starts_at: datetime,
+) -> Dict[str, Any]:
+    """Cria as duas tarefas de re-confirmacao no CRM: 2 dias e 1 dia antes, as 09:00.
+
+    Por que 09:00: e a primeira hora comercial e o paciente ainda tem o dia inteiro para
+    responder. Por que no CRM (ContactTask) e nao no Google: o lembrete e trabalho da
+    clinica, e o Google e a agenda do profissional.
+
+    Idempotente por `task_metadata.marcador`: a mesma consulta nao gera lembrete repetido.
+    """
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    from backend.models import Contact, ContactTask
+
+    try:
+        fuso = ZoneInfo(agenda.timezone or DEFAULT_TIMEZONE)
+    except (ZoneInfoNotFoundError, ValueError):
+        fuso = ZoneInfo(DEFAULT_TIMEZONE)
+
+    inicio_local = starts_at.astimezone(fuso) if starts_at.tzinfo else starts_at.replace(tzinfo=fuso)
+    agora = datetime.now(fuso)
+
+    contato = None
+    telefone = getattr(appointment, "phone", None)
+    if telefone:
+        normalizado = _normalize_phone(telefone)
+        contato = (
+            db.query(Contact)
+            .filter(Contact.company_id == company_id, Contact.phone == normalizado)
+            .first()
+        )
+        if contato is None:
+            contato = (
+                db.query(Contact)
+                .filter(Contact.company_id == company_id, Contact.phone == telefone)
+                .first()
+            )
+    if contato is None:
+        logger.info(
+            "[Lembretes] agendamento %s sem contato para o telefone %s — nenhum lembrete criado",
+            getattr(appointment, "id", None), telefone,
+        )
+        return {"criados": 0, "motivo": "sem_contato", "telefone": telefone}
+
+    criados = []
+    pulados = []
+    for dias in (2, 1):
+        quando = datetime.combine(
+            (inicio_local.date() - timedelta(days=dias)), time(hour=9, minute=0), tzinfo=fuso
+        )
+        marcador = f"lembrete_{dias}d_agendamento_{getattr(appointment, 'id', 0)}"
+
+        # task_metadata e JSON (nao JSONB), entao nao existe astext: filtramos com o
+        # operador ->> do Postgres. Sem isso a consulta estoura AttributeError e nenhum
+        # lembrete e criado.
+        existente = (
+            db.query(ContactTask)
+            .filter(
+                ContactTask.company_id == company_id,
+                ContactTask.contact_id == contato.id,
+                text("contact_tasks.task_metadata->>'marcador' = :marcador"),
+            )
+            .params(marcador=marcador)
+            .first()
+        )
+        if existente is not None:
+            pulados.append({"dias_antes": dias, "motivo": "ja_existia", "task_id": existente.id})
+            continue
+        if quando <= agora:
+            pulados.append({"dias_antes": dias, "motivo": "horario_ja_passou"})
+            continue
+
+        titulo = (
+            f"Reconfirmar consulta em {dias} dia{'s' if dias > 1 else ''} "
+            f"({inicio_local.strftime('%d/%m/%Y %H:%M')})"
+        )
+        tarefa = ContactTask(
+            contact_id=contato.id,
+            company_id=company_id,
+            task_type="message",
+            title=titulo[:255],
+            description=(
+                f"Enviar mensagem ao paciente pedindo a re-confirmacao da consulta marcada "
+                f"para {inicio_local.strftime('%d/%m/%Y as %H:%M')}. Se ele nao confirmar ou "
+                f"quiser remarcar, o agente consulta a agenda e oferece novas opcoes."
+            ),
+            scheduled_for=quando,
+            reminder_minutes=0,
+            status="pending",
+            priority="high",
+            tags=["lembrete", "reconfirmacao", f"{dias}d"],
+            task_metadata={
+                "marcador": marcador,
+                "origem": "agendamento",
+                "appointment_id": getattr(appointment, "id", None),
+                "dias_antes": dias,
+                "quando_local": quando.isoformat(),
+            },
+        )
+        db.add(tarefa)
+        db.commit()
+        db.refresh(tarefa)
+        criados.append({"dias_antes": dias, "task_id": tarefa.id, "quando": quando.isoformat()})
+
+    logger.info(
+        "[Lembretes] agendamento %s: %s criados, %s pulados",
+        getattr(appointment, "id", None), len(criados), len(pulados),
+    )
+    return {"criados": len(criados), "tarefas": criados, "pulados": pulados}
+
+
+def _cancelar_tarefas_de_lembrete(db: Session, company_id: int, appointment_id: int) -> Dict[str, Any]:
+    """Marca como `canceled` as tarefas de re-confirmacao daquele agendamento.
+
+    Sem isso, cancelar a consulta deixava os dois lembretes pendentes no CRM — alguem
+    ligaria para o paciente reconfirmar uma consulta que nao existe mais.
+    """
+    from backend.models import ContactTask
+
+    tarefas = (
+        db.query(ContactTask)
+        .filter(
+            ContactTask.company_id == company_id,
+            text("contact_tasks.task_metadata->>'appointment_id' = :aid"),
+        )
+        .params(aid=str(appointment_id))
+        .all()
+    )
+    canceladas = 0
+    for tarefa in tarefas:
+        if tarefa.status == "pending":
+            tarefa.status = "canceled"
+            canceladas += 1
+    if canceladas:
+        db.commit()
+    logger.info("[Lembretes] agendamento %s: %s tarefa(s) cancelada(s)", appointment_id, canceladas)
+    return {"canceladas": canceladas, "total_encontradas": len(tarefas)}
+
+
 def create_calendar_scheduling_tools(
     *,
     company_id: int,
@@ -59,7 +203,7 @@ def create_calendar_scheduling_tools(
     if not action_set:
         action_set = {"find_slots"}
 
-    @function_tool
+    @function_tool(strict_mode=False)
     async def find_available_lead_slots(
         context: RunContextWrapper,
         agenda_id: Annotated[Optional[int], Field(description="ID da agenda da plataforma a consultar. Opcional quando houver apenas uma agenda ativa.")] = None,
@@ -162,7 +306,7 @@ def create_calendar_scheduling_tools(
         finally:
             db.close()
 
-    @function_tool
+    @function_tool(strict_mode=False)
     async def create_lead_appointment(
         context: RunContextWrapper,
         selected_start_time: Annotated[str, Field(description="Horário escolhido em ISO, YYYY-MM-DD HH:MM ou DD/MM/YYYY HH:MM.")],
@@ -271,6 +415,20 @@ def create_calendar_scheduling_tools(
                 company_id=company_id,
                 appointment=appointment,
             )
+            # Duas tarefas de re-confirmacao no CRM: 2 dias e 1 dia antes, 09:00 locais.
+            # Falha aqui NAO derruba o agendamento (que ja esta gravado): devolve o motivo.
+            try:
+                lembretes_status = _criar_tarefas_de_lembrete(
+                    db=db,
+                    company_id=company_id,
+                    appointment=appointment,
+                    agenda=agenda,
+                    starts_at=starts_at,
+                )
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                logger.exception("[Lembretes] falha ao criar tarefas de re-confirmacao: %s", exc)
+                lembretes_status = {"criados": 0, "motivo": "erro", "detalhe": str(exc)}
             dynamic_followup_status = _cancel_dynamic_followup_for_appointment_if_present(
                 db=db,
                 appointment=appointment,
@@ -304,6 +462,7 @@ def create_calendar_scheduling_tools(
                 "local_link": appointment.local_link,
                 "google_sync_status": google_sync_status,
                 "confirmation_status": confirmation_status,
+                "lembretes": lembretes_status,
                 "dynamic_followup_status": dynamic_followup_status,
                 "message_for_agent": (
                     f"Confirme usando a data/hora exata `{appointment_display}`. "
@@ -332,7 +491,7 @@ def create_calendar_scheduling_tools(
         finally:
             db.close()
 
-    @function_tool
+    @function_tool(strict_mode=False)
     async def reschedule_lead_appointment(
         context: RunContextWrapper,
         new_start_time: Annotated[str, Field(description="Novo horário escolhido em ISO, YYYY-MM-DD HH:MM ou DD/MM/YYYY HH:MM.")],
@@ -494,7 +653,7 @@ def create_calendar_scheduling_tools(
         finally:
             db.close()
 
-    @function_tool
+    @function_tool(strict_mode=False)
     async def cancel_lead_appointment(
         context: RunContextWrapper,
         appointment_id: Annotated[Optional[int], Field(description="ID do agendamento existente, quando conhecido.")] = None,
@@ -551,6 +710,9 @@ def create_calendar_scheduling_tools(
 
             starts_at = appointment.consulta_data
             confirmation_status = _cancel_confirmation_tasks_if_present(db, appointment.id)
+            # Os dois lembretes de re-confirmacao morrem junto com a consulta: senao alguem
+            # cobra confirmacao de um horario que nao existe mais.
+            lembretes_status = _cancelar_tarefas_de_lembrete(db, company_id, appointment.id)
             google_sync_status = _cancel_google_calendar_event_if_available(db, appointment)
             appointment.status = "CANCELLED"
             if reason:
@@ -561,6 +723,30 @@ def create_calendar_scheduling_tools(
             db.commit()
             db.refresh(appointment)
 
+            # Horarios novos para o agente oferecer na hora: o horario liberado volta a
+            # aparecer aqui, porque o agendamento virou CANCELLED.
+            novas_opcoes: List[Dict[str, Any]] = []
+            try:
+                agenda_da_consulta = appointment.agenda_id or configured_agenda_id
+                agenda_ref = (
+                    db.query(Agenda).filter(Agenda.id == agenda_da_consulta).first()
+                    if agenda_da_consulta
+                    else None
+                )
+                if agenda_ref is not None:
+                    inicio_busca = datetime.now(_safe_timezone(agenda_ref.timezone))
+                    opcoes = _build_available_slots(
+                        db=db,
+                        agenda=agenda_ref,
+                        start_date=inicio_busca.date(),
+                        end_date=inicio_busca.date() + timedelta(days=14),
+                        preferred_period="",
+                        limit=3,
+                    )
+                    novas_opcoes = opcoes.get("slots", []) if isinstance(opcoes, dict) else list(opcoes or [])
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[Cancelamento] nao consegui listar horarios novos: %s", exc)
+
             return {
                 "success": True,
                 "status": "cancelled",
@@ -568,6 +754,15 @@ def create_calendar_scheduling_tools(
                 "starts_at": starts_at.isoformat() if starts_at else None,
                 "google_sync_status": google_sync_status,
                 "confirmation_status": confirmation_status,
+                "lembretes": lembretes_status,
+                "novas_opcoes": novas_opcoes,
+                "message_for_agent": (
+                    "Horario liberado. Ofereca no maximo 3 destas opcoes novas: "
+                    + " | ".join(str(o) for o in novas_opcoes[:3])
+                    if novas_opcoes
+                    else "Horario liberado. Nao ha horario livre nos proximos 14 dias: ofereca "
+                         "falar com um atendente."
+                ),
                 "message_for_lead": "Tudo certo, o agendamento foi cancelado.",
             }
         except Exception as exc:

@@ -17,7 +17,7 @@ from agents import function_tool
 logger = logging.getLogger(__name__)
 
 
-@function_tool
+@function_tool(strict_mode=False)
 def confirm_cancellation(
     company_id: Annotated[int, Field(description="ID da empresa")],
     phone: Annotated[str, Field(description="Telefone do cliente (formato: 5500000000009)")],
@@ -98,7 +98,7 @@ def confirm_cancellation(
             pass
 
 
-@function_tool
+@function_tool(strict_mode=False)
 def reschedule_appointment(
     company_id: Annotated[int, Field(description="ID da empresa")],
     phone: Annotated[str, Field(description="Telefone do cliente (formato: 5500000000009)")],
@@ -268,7 +268,7 @@ def reschedule_appointment(
             pass
 
 
-@function_tool
+@function_tool(strict_mode=False)
 def suggest_reschedule_before_cancel(
     company_id: Annotated[int, Field(description="ID da empresa")],
     phone: Annotated[str, Field(description="Telefone do cliente (formato: 5500000000009)")],
