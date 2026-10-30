@@ -184,6 +184,16 @@ export const SIDEBAR_MODULE_MENUS: Record<ModuleKey, MenuItem[]> = {
       permission: 'company',
       requiresPlatformAdmin: true,
     },
+    // Equipe & Acessos: a tela que configura papel, perfil de permissao e
+    // vinculo de cada usuario. No nivel de cima de proposito — como subitem de
+    // um grupo colapsado ela existia e nao se achava.
+    {
+      path: '/equipe',
+      label: 'Equipe & Acessos',
+      icon: UserCog,
+      permission: 'company',
+      requiresClinicalAdmin: true,
+    },
     { path: '/company/ai-provider', label: 'Provedor de IA', icon: KeyRound, permission: 'company' },
     { path: '/config/midias', label: 'Canais & Origens', icon: Share2, isNew: true, permission: 'company' },
     { path: '/company/custom-fields', label: 'Campos Personalizados', icon: ClipboardCheck, permission: 'company' },
