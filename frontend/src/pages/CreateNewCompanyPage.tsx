@@ -82,6 +82,7 @@ const NewCompanyAdminPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const requestedDraftId = Number(searchParams.get('draftId') || 0) || null;
   const requestedCustomerId = Number(searchParams.get('customerId') || 0) || null;
+  const editingCurrentCompany = searchParams.get('mode') === 'edit';
   const [payload, setPayload] = useState<CompanyRegistrationPayload>(initialPayload);
   const [draftId, setDraftId] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -95,6 +96,17 @@ const NewCompanyAdminPage: React.FC = () => {
       setPayload((current) => ({ ...current, customer_id: requestedCustomerId }));
     }
   }, [requestedCustomerId, requestedDraftId]);
+
+  useEffect(() => {
+    if (!editingCurrentCompany) return;
+    setLoading(true);
+    companyRegistrationApi.getCurrent()
+      .then((current) => setPayload(current))
+      .catch((requestError: any) => {
+        setError(requestError.response?.data?.detail || 'Não foi possível carregar o cadastro da empresa.');
+      })
+      .finally(() => setLoading(false));
+  }, [editingCurrentCompany]);
 
   useEffect(() => {
     if (!requestedDraftId) return;
@@ -141,6 +153,24 @@ const NewCompanyAdminPage: React.FC = () => {
       setSuccess(`Rascunho #${draft.id} salvo. Ele ficará disponível para os administradores da plataforma.`);
     } catch (requestError: any) {
       setError(requestError.response?.data?.detail || 'Não foi possível salvar o rascunho.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveCurrentCompany = async () => {
+    setError('');
+    setSuccess('');
+    if (!requiredComplete) {
+      setError('Preencha os campos obrigatórios antes de salvar a empresa.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await companyRegistrationApi.updateCurrent(payload);
+      setSuccess('Cadastro completo da empresa atualizado com sucesso.');
+    } catch (requestError: any) {
+      setError(requestError.response?.data?.detail || 'Não foi possível atualizar o cadastro da empresa.');
     } finally {
       setLoading(false);
     }
@@ -194,16 +224,18 @@ const NewCompanyAdminPage: React.FC = () => {
   return (
     <main className={agentivePageClass(isDark, 'px-4 py-8 sm:px-6')}>
       <div className="mx-auto w-full max-w-4xl">
-        <button type="button" onClick={() => navigate('/plataforma')} className={agentiveSecondaryButtonClass(isDark, 'mb-4')}>
+        <button type="button" onClick={() => navigate(editingCurrentCompany ? '/company' : '/plataforma')} className={agentiveSecondaryButtonClass(isDark, 'mb-4')}>
           <ArrowLeft className="h-4 w-4" /> Voltar
         </button>
         <section className={agentivePanelClass(isDark, 'p-5 sm:p-6')}>
           <div className="mb-6 flex items-start gap-3">
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand text-white"><Building2 className="h-5 w-5" /></div>
             <div>
-              <h1 className="text-xl font-semibold">Criar nova empresa</h1>
+              <h1 className="text-xl font-semibold">{editingCurrentCompany ? 'Editar cadastro da empresa' : 'Criar nova empresa'}</h1>
               <p className={isDark ? 'mt-1 text-sm text-white/55' : 'mt-1 text-sm text-brand/55'}>
-                Preencha os dados, salve um rascunho ou revise antes de criar o workspace.
+                {editingCurrentCompany
+                  ? 'Atualize os dados cadastrais, responsáveis, funcionamento e cobrança da empresa.'
+                  : 'Preencha os dados, salve um rascunho ou revise antes de criar o workspace.'}
               </p>
             </div>
             {reviewing && (
@@ -281,12 +313,20 @@ const NewCompanyAdminPage: React.FC = () => {
           </div>
 
           <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <button type="button" onClick={() => void saveDraft()} disabled={loading} className={agentiveSecondaryButtonClass(isDark)}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar rascunho
-            </button>
-            <button type="button" onClick={() => (reviewing ? void createCompany() : setReviewing(true))} disabled={loading} className={agentivePrimaryButtonClass()}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />} {reviewing ? 'Confirmar e criar empresa' : 'Revisar e criar'}
-            </button>
+            {editingCurrentCompany ? (
+              <button type="button" onClick={() => void saveCurrentCompany()} disabled={loading} className={agentivePrimaryButtonClass()}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar cadastro completo
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={() => void saveDraft()} disabled={loading} className={agentiveSecondaryButtonClass(isDark)}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Salvar rascunho
+                </button>
+                <button type="button" onClick={() => (reviewing ? void createCompany() : setReviewing(true))} disabled={loading} className={agentivePrimaryButtonClass()}>
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Building2 className="h-4 w-4" />} {reviewing ? 'Confirmar e criar empresa' : 'Revisar e criar'}
+                </button>
+              </>
+            )}
           </div>
         </section>
       </div>

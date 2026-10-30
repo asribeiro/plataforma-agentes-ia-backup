@@ -717,6 +717,14 @@ const CompanyConfig: React.FC = () => {
                 <>
                   <button
                     type="button"
+                    onClick={() => navigate('/new-company-admin?mode=edit')}
+                    className={agentiveSecondaryButtonClass(isDark)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Editar cadastro completo
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setIsCompanyEditing(true)}
                     className={agentiveSecondaryButtonClass(isDark)}
                   >
