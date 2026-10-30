@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Union
 from pydantic import BaseModel, EmailStr, validator
 from backend.db import get_db
+from backend.services.papel_clinico import PAPEIS_VALIDOS
 from backend.models import User, Client, Company, ClientCompany, Team
 from backend.auth import get_current_user, hash_password
 from backend.services.company_access_control import (
@@ -35,9 +36,9 @@ class UserBase(BaseModel):
 
     @validator('role')
     def validate_role(cls, v):
-        valid_roles = ['admin', 'manager', 'staff']
-        if v not in valid_roles:
-            raise ValueError(f'Role deve ser um dos valores: {", ".join(valid_roles)}')
+        # Lista unica: a mesma que o CHECK do banco espelha (services/papel_clinico).
+        if v not in PAPEIS_VALIDOS:
+            raise ValueError(f'Role deve ser um dos valores: {", ".join(PAPEIS_VALIDOS)}')
         return v
 
 class UserCreate(UserBase):
@@ -61,9 +62,8 @@ class UserUpdate(BaseModel):
     def validate_role(cls, v):
         if v is None:
             return v
-        valid_roles = ['admin', 'manager', 'staff']
-        if v not in valid_roles:
-            raise ValueError(f'Role deve ser um dos valores: {", ".join(valid_roles)}')
+        if v not in PAPEIS_VALIDOS:
+            raise ValueError(f'Role deve ser um dos valores: {", ".join(PAPEIS_VALIDOS)}')
         return v
 
 class TeamInfo(BaseModel):
