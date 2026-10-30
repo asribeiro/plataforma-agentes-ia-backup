@@ -26,10 +26,18 @@
  *     desativar profissionais antes;
  *   - redução de limite -> confirmação explícita em modal e reenvio com
  *     `confirmar: true`.
+ *
+ * Cobrança (área "Plano & cobrança", fechada por padrão em cada cartão): o
+ * painel dizia quem era o cliente e qual o limite, mas não quanto ele paga. A
+ * área por empresa define plano e dia de vencimento, emite a fatura do mês e
+ * marca paga/reabre. O bloco "Planos e preços" no topo existe porque o preço
+ * nasce nulo no catálogo: sem definir preço, nenhuma fatura pode ser emitida, e
+ * o botão de emitir fica desabilitado com o motivo escrito ao lado.
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  BadgeDollarSign,
   Building2,
   Calendar,
   CalendarCheck,
@@ -62,6 +70,10 @@ import {
   agentiveSecondaryButtonClass,
 } from '../components/AgentiveUI.tsx';
 import {
+  CobrancaEmpresaPanel,
+  PlanosPanel,
+} from '../components/CobrancaPlataforma.tsx';
+import {
   adminPlataformaApi,
   exigeConfirmacao,
   mensagemDeErro,
@@ -73,6 +85,17 @@ import {
   type ModalidadeTier,
   type PainelPlataforma,
 } from '../services/adminPlataformaApi.ts';
+import {
+  cobrancaApi,
+  competenciaAtual,
+  rotuloCompetencia,
+  type CobrancaEmpresa,
+  type Fatura,
+  type Plano,
+  type PlanoAtualizacao,
+  type StatusFatura,
+} from '../services/cobrancaApi.ts';
+import { formatarPreco } from '../services/clinicApi.ts';
 
 // --------------------------------------------------------------------------
 // Formatação
@@ -165,6 +188,8 @@ const Contagem: React.FC<ContagemProps> = ({ icon: Icon, rotulo, valor, detalhe,
 );
 
 interface EmpresaCardProps {
+  /** Área "Plano & cobrança" do cartão, montada pela tela (fechada por padrão). */
+  areaCobranca: React.ReactNode;
   bloqueado: boolean;
   empresa: EmpresaDaPlataforma;
   isDark: boolean;
@@ -177,6 +202,7 @@ interface EmpresaCardProps {
 }
 
 const EmpresaCard: React.FC<EmpresaCardProps> = ({
+  areaCobranca,
   bloqueado,
   empresa,
   isDark,
@@ -352,6 +378,9 @@ const EmpresaCard: React.FC<EmpresaCardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Cobrança: plano, vencimento, emissão e faturas desta empresa */}
+      {areaCobranca}
     </section>
   );
 };
@@ -392,11 +421,62 @@ const Plataforma: React.FC = () => {
     tier: ModalidadeTier;
   } | null>(null);
 
+  // --- Cobrança -----------------------------------------------------------
+  /**
+   * Catálogo de planos é GLOBAL: o preço de "Plano Clinica" é o mesmo para todos
+   * os clientes. Por isso vive na tela e é passado aos cartões — cada cartão
+   * buscar o próprio catálogo daria três respostas que podem divergir.
+   */
+  const [planos, setPlanos] = useState<Plano[]>([]);
+  const [planosAbertos, setPlanosAbertos] = useState(false);
+  const [carregandoPlanos, setCarregandoPlanos] = useState(true);
+  const [erroPlanos, setErroPlanos] = useState<string | null>(null);
+  const [salvandoPlanoId, setSalvandoPlanoId] = useState<number | null>(null);
+
+  /** Cobrança por empresa. Ausente = ainda não buscada (busca na 1ª abertura). */
+  const [cobrancas, setCobrancas] = useState<Record<number, CobrancaEmpresa>>({});
+  const [cobrancaAberta, setCobrancaAberta] = useState<Record<number, boolean>>({});
+  const [carregandoCobranca, setCarregandoCobranca] = useState<Record<number, boolean>>({});
+  const [erroCobranca, setErroCobranca] = useState<Record<number, string | null>>({});
+  const [salvandoAssinaturaId, setSalvandoAssinaturaId] = useState<number | null>(null);
+  const [emitindoId, setEmitindoId] = useState<number | null>(null);
+  const [faturaEmAndamentoId, setFaturaEmAndamentoId] = useState<number | null>(null);
+
+  const carregarPlanos = useCallback(async () => {
+    setCarregandoPlanos(true);
+    setErroPlanos(null);
+    try {
+      const dados = await cobrancaApi.listarPlanos();
+      setPlanos(dados);
+    } catch (e) {
+      // Erro de planos NÃO derruba a lista de clientes: são dados diferentes, e
+      // o cartão de cada empresa continua servindo. O aviso fica no bloco.
+      setErroPlanos(mensagemDeErro(e));
+    } finally {
+      setCarregandoPlanos(false);
+    }
+  }, []);
+
+  const carregarCobranca = useCallback(async (empresaId: number) => {
+    setCarregandoCobranca((prev) => ({ ...prev, [empresaId]: true }));
+    setErroCobranca((prev) => ({ ...prev, [empresaId]: null }));
+    try {
+      const dados = await cobrancaApi.lerCobranca(empresaId);
+      setCobrancas((prev) => ({ ...prev, [empresaId]: dados }));
+    } catch (e) {
+      setErroCobranca((prev) => ({ ...prev, [empresaId]: mensagemDeErro(e) }));
+    } finally {
+      setCarregandoCobranca((prev) => ({ ...prev, [empresaId]: false }));
+    }
+  }, []);
+
   const carregar = useCallback(async () => {
     setCarregando(true);
     setErro(null);
     setSemPermissao(false);
     setMotivoSemPermissao(null);
+    // Planos em paralelo: a lista de clientes não espera o catálogo (e vice-versa).
+    void carregarPlanos();
     try {
       const dados = await adminPlataformaApi.listarEmpresas();
       setPainel(dados);
@@ -418,7 +498,7 @@ const Plataforma: React.FC = () => {
     } finally {
       setCarregando(false);
     }
-  }, []);
+  }, [carregarPlanos]);
 
   useEffect(() => {
     carregar();
@@ -539,6 +619,114 @@ const Plataforma: React.FC = () => {
     [],
   );
 
+  // ---------------------------------------------------------------------
+  // Cobrança: ações
+  // ---------------------------------------------------------------------
+  /**
+   * Abre/fecha a área do cartão. O GET da cobrança acontece na PRIMEIRA
+   * abertura: uma chamada por empresa em toda visita seria carga sem uso, já
+   * que a maioria dos cartões fica fechada.
+   */
+  const alternarCobranca = useCallback(
+    (empresaId: number) => {
+      setCobrancaAberta((prev) => ({ ...prev, [empresaId]: !prev[empresaId] }));
+      if (!cobrancas[empresaId] && !carregandoCobranca[empresaId]) {
+        void carregarCobranca(empresaId);
+      }
+    },
+    [cobrancas, carregandoCobranca, carregarCobranca],
+  );
+
+  const salvarAssinatura = useCallback(
+    async (empresaId: number, planoId: number, diaVencimento: number) => {
+      setSalvandoAssinaturaId(empresaId);
+      try {
+        const dados = await cobrancaApi.definirAssinatura(empresaId, {
+          plano_id: planoId,
+          dia_vencimento: diaVencimento,
+        });
+        setCobrancas((prev) => ({ ...prev, [empresaId]: dados }));
+        setErroCobranca((prev) => ({ ...prev, [empresaId]: null }));
+        toast.success(
+          dados.assinatura
+            ? `${dados.company_nome}: ${dados.assinatura.plano_nome}, vencimento todo dia ${dados.assinatura.dia_vencimento}.`
+            : `${dados.company_nome}: cobrança atualizada.`,
+        );
+      } catch (e) {
+        // 409 de plano inativo vem com o motivo em `detail`: mostrar como veio.
+        toast.error(mensagemDeErro(e));
+      } finally {
+        setSalvandoAssinaturaId(null);
+      }
+    },
+    [],
+  );
+
+  const emitirFatura = useCallback(
+    async (empresa: EmpresaDaPlataforma) => {
+      setEmitindoId(empresa.id);
+      // Competência explícita: o backend usaria o mês do servidor, que pode ser
+      // outro na virada do mês (fuso). O rótulo do botão diz "do mês" — o que
+      // foi criado tem que ser o que está escrito.
+      const competencia = competenciaAtual();
+      try {
+        const fatura = await cobrancaApi.emitirFatura(empresa.id, { competencia });
+        toast.success(
+          `Fatura de ${rotuloCompetencia(fatura.competencia)} emitida para ${nomeDaEmpresa(empresa)} (${formatarPreco(
+            fatura.valor_centavos,
+          )}).`,
+        );
+        // O POST devolve só a fatura; os totais em aberto/pago vêm do GET.
+        await carregarCobranca(empresa.id);
+      } catch (e) {
+        toast.error(mensagemDeErro(e));
+      } finally {
+        setEmitindoId(null);
+      }
+    },
+    [carregarCobranca],
+  );
+
+  const atualizarFatura = useCallback(
+    async (empresa: EmpresaDaPlataforma, fatura: Fatura, status: StatusFatura) => {
+      setFaturaEmAndamentoId(fatura.id);
+      try {
+        const atualizada = await cobrancaApi.atualizarFatura(fatura.id, { status });
+        toast.success(
+          atualizada.status === 'paga'
+            ? `Fatura de ${rotuloCompetencia(atualizada.competencia)} de ${nomeDaEmpresa(empresa)} marcada como paga.`
+            : `Fatura de ${rotuloCompetencia(atualizada.competencia)} de ${nomeDaEmpresa(empresa)} reaberta.`,
+        );
+        await carregarCobranca(empresa.id);
+      } catch (e) {
+        toast.error(mensagemDeErro(e));
+      } finally {
+        setFaturaEmAndamentoId(null);
+      }
+    },
+    [carregarCobranca],
+  );
+
+  const salvarPlano = useCallback(async (planoId: number, dados: PlanoAtualizacao) => {
+    setSalvandoPlanoId(planoId);
+    try {
+      const atualizado = await cobrancaApi.atualizarPlano(planoId, dados);
+      // Os cartões leem o preço desta lista: atualizar aqui já corrige o
+      // "sem preço" do botão de emitir, sem um GET extra por empresa.
+      setPlanos((prev) => prev.map((item) => (item.id === atualizado.id ? atualizado : item)));
+      setErroPlanos(null);
+      toast.success(
+        `${atualizado.nome}: ${
+          atualizado.preco_centavos === null ? 'preço removido' : formatarPreco(atualizado.preco_centavos)
+        }${atualizado.ativo ? '' : ' · inativo'}.`,
+      );
+    } catch (e) {
+      toast.error(mensagemDeErro(e));
+    } finally {
+      setSalvandoPlanoId(null);
+    }
+  }, []);
+
   const bloqueado = entrando || abrindoConfiguracao || salvandoId !== null;
   const empresas = painel?.empresas ?? [];
 
@@ -548,7 +736,7 @@ const Plataforma: React.FC = () => {
         <AgentivePageHeader
           icon={Layers}
           title="Clientes da plataforma"
-          description="Todos os clientes, com os números que decidem a modalidade. As ações de configuração abrem a tela do cliente no contexto dele; salvar a modalidade vale para a empresa da linha."
+          description="Todos os clientes, com os números que decidem a modalidade. As ações de configuração abrem a tela do cliente no contexto dele; salvar a modalidade vale para a empresa da linha. Cada cartão abre a área de plano e cobrança, e os preços de cada plano ficam em Planos e preços."
           badges={
             painel ? (
               <span className={agentivePillClass(isDark, false)}>
@@ -559,6 +747,16 @@ const Plataforma: React.FC = () => {
           }
           actions={
             <>
+              <button
+                type="button"
+                onClick={() => setPlanosAbertos((prev) => !prev)}
+                aria-expanded={planosAbertos}
+                className={agentiveSecondaryButtonClass(isDark)}
+                title="Preço de cada plano — sem preço definido, nenhuma fatura pode ser emitida"
+              >
+                <BadgeDollarSign className="h-4 w-4" />
+                Planos e preços
+              </button>
               <Link to="/new-company-admin" className={agentivePrimaryButtonClass()}>
                 <Plus className="h-4 w-4" />
                 Nova empresa cliente
@@ -575,6 +773,20 @@ const Plataforma: React.FC = () => {
             </>
           }
         />
+
+        {!semPermissao && (
+          <PlanosPanel
+            aberto={planosAbertos}
+            carregando={carregandoPlanos}
+            erro={erroPlanos}
+            isDark={isDark}
+            onAlternar={() => setPlanosAbertos((prev) => !prev)}
+            onRecarregar={carregarPlanos}
+            onSalvar={salvarPlano}
+            planos={planos}
+            salvandoId={salvandoPlanoId}
+          />
+        )}
 
         {carregando && !painel && (
           <div className={agentivePanelClass(isDark, 'p-5')}>
@@ -634,6 +846,28 @@ const Plataforma: React.FC = () => {
                 selecao={selecoes[empresa.id] ?? ''}
                 salvando={salvandoId === empresa.id}
                 bloqueado={bloqueado}
+                areaCobranca={
+                  <CobrancaEmpresaPanel
+                    aberto={Boolean(cobrancaAberta[empresa.id])}
+                    bloqueado={bloqueado}
+                    carregando={Boolean(carregandoCobranca[empresa.id])}
+                    cobranca={cobrancas[empresa.id] ?? null}
+                    empresaNome={nomeDaEmpresa(empresa)}
+                    emitindo={emitindoId === empresa.id}
+                    erro={erroCobranca[empresa.id] ?? null}
+                    faturaEmAndamento={faturaEmAndamentoId}
+                    isDark={isDark}
+                    onAlternar={() => alternarCobranca(empresa.id)}
+                    onAtualizarFatura={(fatura, status) => atualizarFatura(empresa, fatura, status)}
+                    onEmitir={() => emitirFatura(empresa)}
+                    onRecarregar={() => carregarCobranca(empresa.id)}
+                    onSalvarAssinatura={(planoId, diaVencimento) =>
+                      salvarAssinatura(empresa.id, planoId, diaVencimento)
+                    }
+                    planos={planos}
+                    salvando={salvandoAssinaturaId === empresa.id}
+                  />
+                }
                 onEscolher={(tier) => setSelecoes((prev) => ({ ...prev, [empresa.id]: tier }))}
                 onSalvar={() => {
                   const tier = selecoes[empresa.id];
