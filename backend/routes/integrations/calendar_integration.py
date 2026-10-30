@@ -124,6 +124,13 @@ def _oauth_redirect_uri(request: Optional[Request] = None) -> str:
     return f"{PUBLIC_BASE_URL}/api/integrations/calendar/google/oauth/callback"
 
 
+# O Google devolve o conjunto de escopos ja concedidos pelo usuario, que pode ser MAIOR
+# que o pedido (ex.: os antigos + calendar.events). O oauthlib, por padrao, trata
+# "scope has changed" como excecao e a troca do code pelo token falha — o token nunca e
+# gravado e a tela mostra so "nao foi possivel". Isso libera aceitar o conjunto concedido.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+
+
 def _oauth_client_config(db: Optional[Session] = None, redirect_uri: Optional[str] = None) -> dict:
     client_id, client_secret, _ = credenciais_google_oauth(db)
     redirect_uri = redirect_uri or _oauth_redirect_uri()
@@ -441,7 +448,12 @@ def google_calendar_oauth_callback(
     flow = _new_oauth_flow(db, payload.get("redirect_uri"))
     try:
         flow.fetch_token(code=code)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 - erro do Google vira aviso na tela, nao 500
+        # Antes isto era silencioso: a tela dizia "nao foi possivel" e o log ficava vazio.
+        logger.error(
+            "OAuth Google: falha ao trocar o code por token (agenda=%s): %s: %s",
+            agenda_do_state, type(exc).__name__, exc, exc_info=True,
+        )
         return RedirectResponse(
             _oauth_success_redirect("google_oauth=error&reason=token", agenda_do_state, retorno, origem_state)
         )
@@ -482,6 +494,10 @@ def google_calendar_oauth_callback(
             agenda.google_calendar_time_zone = primary_calendar.get("timeZone")
         db.add(agenda)
         db.commit()
+        logger.info(
+            "OAuth Google: credencial gravada na agenda %s (empresa %s), conta=%s, escopos=%s",
+            agenda.id, company_id, conta, escopos,
+        )
         return RedirectResponse(
             _oauth_success_redirect("google_oauth=success", agenda.id, retorno, origem_state)
         )
