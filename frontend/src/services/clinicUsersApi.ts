@@ -19,7 +19,32 @@ export interface ClinicaUsuario {
   role_rotulo: string;
   professional_id: number | null;
   professional_nome: string | null;
+  /** Perfil de acesso (equipe de permissões): define o que a pessoa VÊ no menu. */
+  team_id: number | null;
+  team_nome: string | null;
   is_active: boolean;
+}
+
+/**
+ * Perfil de acesso = "equipe" de permissões (`/api/teams/`).
+ *
+ * É o que define os itens de menu liberados. `sidebar_permissions` é a lista
+ * crua das permissões; a tela traduz em nomes legíveis.
+ */
+export interface PerfilAcesso {
+  id: number;
+  company_id: number;
+  name: string;
+  code: string;
+  description?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  user_count?: number;
+  sidebar_permissions: string[];
+  contact_permissions?: {
+    include_outside_crm?: boolean;
+    pipeline_stage_ids?: number[];
+  };
 }
 
 export interface PapelOpcao {
@@ -36,6 +61,8 @@ export interface EuClinica {
   role_rotulo: string;
   professional_id: number | null;
   professional_nome: string | null;
+  team_id: number | null;
+  team_nome: string | null;
   pode_administrar_usuarios: boolean;
   ve_prontuario: boolean;
 }
@@ -46,12 +73,16 @@ export interface ClinicaUsuarioEntrada {
   password: string;
   role: string;
   professional_id?: number | null;
+  /** null/ausente = cria sem perfil de acesso (a pessoa não vê menu). */
+  team_id?: number | null;
 }
 
 export interface ClinicaUsuarioPatch {
   name?: string;
   role?: string;
   professional_id?: number | null;
+  /** Ausente preserva o perfil atual; null explícito remove. */
+  team_id?: number | null;
   is_active?: boolean;
 }
 
@@ -95,6 +126,18 @@ export const equipeApi = {
 
   async papeis(): Promise<PapelOpcao[]> {
     const { data } = await api.get<PapelOpcao[]>('/api/clinic/users/papeis');
+    return data;
+  },
+
+  /**
+   * Perfis de acesso da empresa (`/api/teams/`).
+   *
+   * A lista de perfis é a MESMA que a aba Equipes de /company administra —
+   * por isso não há cópia aqui, só a leitura. Falhar aqui não derruba a tela:
+   * quem chama trata a lista vazia como "empresa sem perfis criados".
+   */
+  async perfis(): Promise<PerfilAcesso[]> {
+    const { data } = await api.get<PerfilAcesso[]>('/api/teams/');
     return data;
   },
 

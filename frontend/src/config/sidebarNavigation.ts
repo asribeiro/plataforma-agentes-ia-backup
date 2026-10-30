@@ -127,7 +127,7 @@ export const SIDEBAR_MODULE_MENUS: Record<ModuleKey, MenuItem[]> = {
         // de permissoes de equipe nao conhece papel clinico.
         {
           path: '/equipe',
-          label: 'Equipe',
+          label: 'Equipe & Acessos',
           icon: UserCog,
           permission: 'company',
           requiresClinicalAdmin: true,

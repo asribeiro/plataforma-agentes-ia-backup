@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
+  ArrowRight,
   Building2,
   Camera,
   Check,
@@ -304,8 +306,15 @@ const DropdownItem: React.FC<DropdownItemProps> = ({
 
 const CompanyConfig: React.FC = () => {
   const { isDark } = useTheme();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
-  const [currentTab, setCurrentTab] = useState<CompanyTab>('users');
+  // `?tab=users|teams|overview`: a tela de Equipe & Acessos manda para
+  // /company?tab=teams quando a empresa ainda não tem perfil criado.
+  const tabParam = searchParams.get('tab');
+  const [currentTab, setCurrentTab] = useState<CompanyTab>(
+    tabParam === 'overview' || tabParam === 'users' || tabParam === 'teams' ? tabParam : 'users',
+  );
   const [nameCompany, setNameCompany] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
@@ -339,6 +348,12 @@ const CompanyConfig: React.FC = () => {
   useEffect(() => {
     fetchInitialData();
   }, []);
+
+  useEffect(() => {
+    if (tabParam === 'overview' || tabParam === 'users' || tabParam === 'teams') {
+      setCurrentTab(tabParam);
+    }
+  }, [tabParam]);
 
   useEffect(() => {
     if (!companyLogo) {
@@ -597,9 +612,9 @@ const CompanyConfig: React.FC = () => {
 
   const userDialogDescription =
     dialogMode === 'create'
-      ? 'Defina acesso, equipe e credenciais iniciais.'
+      ? 'Crie o login. Papel e perfil de acesso são definidos em Equipe & Acessos.'
       : dialogMode === 'edit'
-        ? 'Atualize dados de acesso e vínculo de equipe.'
+        ? 'Dados do login. Papel e perfil de acesso são definidos em Equipe & Acessos.'
         : selectedUser?.name || 'Atualize a credencial do usuário.';
 
   if (isLoading) {
@@ -934,8 +949,8 @@ const CompanyConfig: React.FC = () => {
                     <thead className={isDark ? 'bg-white/[0.04]' : 'bg-brand-canvas'}>
                       <tr className={`text-left text-xs font-semibold uppercase tracking-[0.08em] ${isDark ? 'text-white/45' : 'text-brand/45'}`}>
                         <th className="px-5 py-3">Usuário</th>
-                        <th className="px-5 py-3">Equipe</th>
-                        <th className="px-5 py-3">Função</th>
+                        <th className="px-5 py-3">Perfil de acesso</th>
+                        <th className="px-5 py-3">Papel</th>
                         <th className="px-5 py-3">Status</th>
                         <th className="px-5 py-3 text-right">Ações</th>
                       </tr>
@@ -964,7 +979,7 @@ const CompanyConfig: React.FC = () => {
                               {teamName ? (
                                 <span className={agentivePillClass(isDark)}>{teamName}</span>
                               ) : (
-                                <span className={`text-xs italic ${isDark ? 'text-white/35' : 'text-brand/35'}`}>Sem equipe</span>
+                                <span className={`text-xs italic ${isDark ? 'text-white/35' : 'text-brand/35'}`}>Sem perfil</span>
                               )}
                             </td>
                             <td className="px-5 py-4">
@@ -1052,7 +1067,7 @@ const CompanyConfig: React.FC = () => {
                         </div>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <span className={agentivePillClass(isDark, false)}>{getRoleLabel(user.role)}</span>
-                          <span className={agentivePillClass(isDark, false)}>{teamName || 'Sem equipe'}</span>
+                          <span className={agentivePillClass(isDark, false)}>{teamName || 'Sem perfil'}</span>
                           <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                             user.is_active
                               ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'
@@ -1123,27 +1138,56 @@ const CompanyConfig: React.FC = () => {
                 onChange={event => setUserForm(prev => ({ ...prev, email: event.target.value }))}
                 required
               />
-              <SelectField
-                label="Função"
-                value={userForm.role}
-                onChange={event => setUserForm(prev => ({ ...prev, role: event.target.value }))}
-                required
-              >
-                <option value="staff">Funcionário</option>
-              </SelectField>
-              <SelectField
-                label="Equipe"
-                value={userForm.team_id?.toString() || ''}
-                onChange={event => setUserForm(prev => ({
-                  ...prev,
-                  team_id: event.target.value ? Number(event.target.value) : undefined,
-                }))}
-              >
-                <option value="">Sem equipe</option>
-                {teams.map(team => (
-                  <option key={team.id} value={team.id.toString()}>{team.name}</option>
-                ))}
-              </SelectField>
+              <div className="sm:col-span-2">
+                <AgentiveAlert
+                  variant="info"
+                  title="Papel e perfil de acesso são definidos em Equipe & Acessos"
+                >
+                  <p>
+                    O <strong>papel</strong> diz o que a pessoa é na clínica (prontuário, agenda, o que ela
+                    pode fazer); o <strong>perfil de acesso</strong> diz o que ela vê no menu (CRM, chat,
+                    campanhas…). Os dois ficam na mesma tela, para ninguém editar um achando que editou o
+                    outro.
+                  </p>
+                  {dialogMode === 'edit' && selectedUser && (
+                    <p className="mt-1">
+                      Hoje: papel <strong>{getRoleLabel(selectedUser.role)}</strong> · perfil{' '}
+                      <strong>{getTeamName(selectedUser) || 'sem perfil (não vê menu)'}</strong>.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeUserDialog();
+                      navigate('/equipe');
+                    }}
+                    className={`mt-2 ${agentiveSecondaryButtonClass(isDark)}`}
+                  >
+                    <ArrowRight className="h-4 w-4" /> Abrir Equipe & Acessos
+                  </button>
+                </AgentiveAlert>
+              </div>
+              {dialogMode === 'create' && (
+                <div className="sm:col-span-2">
+                  <SelectField
+                    label="Perfil de acesso inicial (opcional)"
+                    value={userForm.team_id?.toString() || ''}
+                    onChange={event => setUserForm(prev => ({
+                      ...prev,
+                      team_id: event.target.value ? Number(event.target.value) : undefined,
+                    }))}
+                  >
+                    <option value="">Sem perfil</option>
+                    {teams.map(team => (
+                      <option key={team.id} value={team.id.toString()}>{team.name}</option>
+                    ))}
+                  </SelectField>
+                  <p className={`mt-1 text-xs ${isDark ? 'text-white/50' : 'text-brand/50'}`}>
+                    Sem perfil a pessoa entra no sistema e não vê item de menu. Depois dá para trocar em
+                    Equipe & Acessos.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
