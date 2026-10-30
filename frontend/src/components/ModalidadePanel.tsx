@@ -3,11 +3,13 @@ import { Building2, Info, Loader2, RefreshCw, ShieldCheck, Users } from 'lucide-
 import { useTheme } from '../contexts/ThemeContext.tsx';
 import {
   AgentiveAlert,
+  AgentiveConfirmModal,
   agentivePillClass,
   agentivePanelClass,
+  agentivePrimaryButtonClass,
   agentiveSecondaryButtonClass,
 } from './AgentiveUI.tsx';
-import { empresaApi, mensagemDeErro, type ModalidadeClinica } from '../services/clinicApi.ts';
+import { empresaApi, mensagemDeErro, type Modalidade, type ModalidadeClinica } from '../services/clinicApi.ts';
 
 interface ModalidadePanelProps {
   /** Versão de uma linha, para telas onde o limite só precisa estar visível. */
@@ -17,19 +19,27 @@ interface ModalidadePanelProps {
 }
 
 /**
- * Modalidade da clínica — SOMENTE LEITURA.
+ * Modalidade da clínica.
  *
- * A modalidade é a faixa comercial vendida: quem altera é o administrador da
- * plataforma (PUT /api/company/flag responde 403 para o cliente). A tela mostra
- * rótulo, limite, quantos profissionais ativos existem e a orientação de uso;
- * nunca oferece edição, mesmo quando `pode_editar` vem true — nesse caso apenas
- * informa onde a alteração acontece.
+ * A modalidade é a faixa comercial vendida. Quem altera é o administrador da
+ * plataforma: `PUT /api/company/flag` responde 403 para o cliente. A tela NÃO
+ * decide isso sozinha — lê `pode_editar` da resposta e só mostra o seletor quando
+ * o servidor autoriza. Antes ela ignorava esse campo e negava na tela uma
+ * permissão que o backend concedia.
+ *
+ * Reduzir o limite tem dois 409 diferentes, e a tela não tenta adivinhar: pedido
+ * de confirmação (reenvia com confirmar=true depois do modal) e rebaixamento
+ * barrado por profissionais ativos (mostra o texto do backend).
  */
 const ModalidadePanel: React.FC<ModalidadePanelProps> = ({ compact = false, onDados }) => {
   const { isDark } = useTheme();
   const [modalidade, setModalidade] = useState<ModalidadeClinica | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [tierEscolhido, setTierEscolhido] = useState<Modalidade | ''>('');
+  const [salvando, setSalvando] = useState(false);
+  const [erroSalvar, setErroSalvar] = useState<string | null>(null);
+  const [confirmacao, setConfirmacao] = useState<string | null>(null);
 
   const dadosRef = useRef(onDados);
   useEffect(() => {
@@ -54,6 +64,35 @@ const ModalidadePanel: React.FC<ModalidadePanelProps> = ({ compact = false, onDa
   useEffect(() => {
     carregar();
   }, [carregar]);
+
+  // O seletor acompanha a modalidade real: se a leitura mudar (outra aba, refresh),
+  // o campo não fica mostrando a faixa antiga.
+  useEffect(() => {
+    setTierEscolhido(modalidade ? (modalidade.professional_tier as Modalidade) : '');
+  }, [modalidade]);
+
+  const aplicar = useCallback(async (tier: Modalidade, confirmar: boolean) => {
+    setSalvando(true);
+    setErroSalvar(null);
+    try {
+      const dados = await empresaApi.definirModalidade(tier, confirmar);
+      setModalidade(dados);
+      dadosRef.current?.(dados);
+      setConfirmacao(null);
+    } catch (e) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      const texto = mensagemDeErro(e);
+      // 409 de confirmação: mostramos o texto do backend e deixamos ele decidir.
+      if (status === 409 && /confirmar/i.test(texto)) {
+        setConfirmacao(texto);
+      } else {
+        setConfirmacao(null);
+        setErroSalvar(texto);
+      }
+    } finally {
+      setSalvando(false);
+    }
+  }, []);
 
   const mutedClass = isDark ? 'text-white/55' : 'text-brand/55';
   const borderClass = isDark ? 'border-white/10' : 'border-brand/10';
@@ -125,7 +164,7 @@ const ModalidadePanel: React.FC<ModalidadePanelProps> = ({ compact = false, onDa
               <h2 className="text-lg font-semibold">Modalidade da clínica</h2>
               <span className={agentivePillClass(isDark, false)}>
                 <ShieldCheck className="h-3.5 w-3.5" />
-                somente leitura
+                {pode_editar ? 'você pode alterar' : 'somente leitura'}
               </span>
             </div>
             <p className={`mt-1 text-sm ${mutedClass}`}>{rotulo}</p>
@@ -173,12 +212,61 @@ const ModalidadePanel: React.FC<ModalidadePanelProps> = ({ compact = false, onDa
         <p className="leading-relaxed">{orientacao}</p>
       </div>
 
-      <p className={`mt-4 text-xs leading-relaxed ${mutedClass}`}>
-        A modalidade é definida pelo administrador da plataforma e não pode ser alterada por aqui.
-        {pode_editar
-          ? ' Esta conta tem permissão administrativa: a troca é feita no painel da plataforma.'
-          : ' Para mudar de modalidade, fale com o suporte da plataforma.'}
-      </p>
+      {pode_editar ? (
+        <div className={`mt-5 rounded-2xl border p-4 ${borderClass} ${isDark ? 'bg-white/[0.04]' : 'bg-brand-canvas'}`}>
+          <p className="text-sm font-semibold">Definir modalidade</p>
+          <p className={`mt-1 text-xs leading-relaxed ${mutedClass}`}>
+            Vale para esta empresa e muda o teto de profissionais ativos. Reduzir o limite pode
+            pedir confirmação — o sistema avisa antes de aplicar.
+          </p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+            <label className="flex-1">
+              <span className={`block text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? 'text-white/40' : 'text-brand/40'}`}>
+                Modalidade
+              </span>
+              <select
+                value={tierEscolhido}
+                onChange={(e) => setTierEscolhido(e.target.value as Modalidade)}
+                disabled={salvando}
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm ${borderClass} ${isDark ? 'bg-transparent text-white' : 'bg-white text-brand'}`}
+              >
+                <option value="mono">Monoprofissional — 1 profissional</option>
+                <option value="up_to_4">Até 4 profissionais</option>
+                <option value="up_to_10">Até 10 profissionais</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => tierEscolhido && aplicar(tierEscolhido, false)}
+              disabled={salvando || !tierEscolhido}
+              className={agentivePrimaryButtonClass()}
+            >
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Salvar modalidade
+            </button>
+          </div>
+          {erroSalvar ? (
+            <p className="mt-2 text-xs font-medium text-red-600 dark:text-red-400">{erroSalvar}</p>
+          ) : null}
+        </div>
+      ) : (
+        <p className={`mt-4 text-xs leading-relaxed ${mutedClass}`}>
+          A modalidade é definida pelo administrador da plataforma. Para mudar de modalidade, fale
+          com o suporte da plataforma.
+        </p>
+      )}
+
+      <AgentiveConfirmModal
+        isOpen={confirmacao !== null}
+        title="Confirmar mudança de modalidade"
+        message={confirmacao ?? ''}
+        confirmText="Aplicar"
+        cancelText="Cancelar"
+        variant="warning"
+        isLoading={salvando}
+        onClose={() => setConfirmacao(null)}
+        onConfirm={() => tierEscolhido && aplicar(tierEscolhido, true)}
+      />
     </div>
   );
 };

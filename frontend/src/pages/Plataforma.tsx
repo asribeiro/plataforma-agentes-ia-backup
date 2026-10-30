@@ -6,13 +6,20 @@
  * quem não é ele. `/customers` não serve: ali é a carteira de pacientes/faturas
  * do workspace, não a lista de empresas.
  *
- * Duas ações, de naturezas diferentes:
+ * Três naturezas de ação na mesma tela:
  *   - "Entrar nesta empresa" muda o CONTEXTO DA SESSÃO no servidor. Depois disso
  *     todo o painel continua lendo a empresa antiga até recarregar — por isso o
  *     `window.location.reload()`. Sem o reload a tela mente.
  *   - "Salvar modalidade" mexe no limite de profissionais de OUTRA empresa sem
  *     sair desta. Os erros vêm prontos do backend (409/422) e são mostrados como
  *     vieram: reescrever a regra aqui é como as duas versões divergem.
+ *   - "Configurar empresa" / "Usuários & acessos" / "Perfis de permissão" são
+ *     atalhos para as telas de configuração DAQUELE cliente. Elas leem a empresa
+ *     da sessão, então só fazem sentido no contexto dele: se a empresa já é a
+ *     atual, navega direto; se não é, troca o contexto (`entrar`) e só depois de
+ *     o servidor confirmar faz navegação DURA (`window.location.href`). Navegar
+ *     pelo router deixaria dados da empresa anterior em caches de várias telas
+ *     (empresa no topo, permissões, listas já carregadas).
  *
  * Dois 409 pedem coisas opostas e a tela os separa pelo texto:
  *   - excedente de profissionais ativos -> não há confirmação possível; a ação é
@@ -21,15 +28,18 @@
  *     `confirmar: true`.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Building2,
   Calendar,
   CalendarCheck,
+  KeyRound,
   Layers,
   Loader2,
   LogIn,
+  Plus,
   RefreshCw,
+  Settings,
   ShieldAlert,
   ShieldCheck,
   UserRound,
@@ -87,6 +97,52 @@ const formatarCnpj = (cnpj: string | null): string | null => {
 };
 
 // --------------------------------------------------------------------------
+// Ações de configuração do cliente
+// --------------------------------------------------------------------------
+/**
+ * Atalhos para as telas de configuração DAQUELE cliente.
+ *
+ * `destino` é a rota que a tela alvo já sabe abrir: `/company` mostra os dados
+ * cadastrais (logo, nome de exibição), `/equipe` é onde se define papel, perfil
+ * de permissão e vínculo, e `/company?tab=teams` abre a aba de perfis —
+ * `CompanyConfig` lê `?tab=` na query string.
+ *
+ * Todas essas telas leem a empresa da SESSÃO, não um id na URL: por isso a ação
+ * só é honesta se o contexto estiver na empresa certa antes de navegar.
+ */
+interface AcaoDaEmpresa {
+  /** Rota a abrir no contexto da empresa. */
+  destino: string;
+  icone: LucideIcon;
+  rotulo: string;
+  /** O que o usuário encontra lá — o rótulo sozinho não diz. */
+  detalhe: string;
+}
+
+const ACOES_DA_EMPRESA: AcaoDaEmpresa[] = [
+  {
+    destino: '/company',
+    icone: Settings,
+    rotulo: 'Configurar empresa',
+    detalhe: 'Dados cadastrais, logo e nome de exibição',
+  },
+  {
+    destino: '/equipe',
+    icone: Users,
+    rotulo: 'Usuários & acessos',
+    detalhe: 'Papel, perfil de permissão e vínculo',
+  },
+  {
+    destino: '/company?tab=teams',
+    icone: KeyRound,
+    rotulo: 'Perfis de permissão',
+    // A aba se chama "Equipes" dentro de /company; dizer isso aqui evita o
+    // usuário achar que caiu na tela errada.
+    detalhe: 'Aba Equipes de /company: perfis e o que cada um pode fazer',
+  },
+];
+
+// --------------------------------------------------------------------------
 // Pedaços da tela
 // --------------------------------------------------------------------------
 interface ContagemProps {
@@ -112,6 +168,7 @@ interface EmpresaCardProps {
   bloqueado: boolean;
   empresa: EmpresaDaPlataforma;
   isDark: boolean;
+  onAbrirConfiguracao: (acao: AcaoDaEmpresa) => void;
   onEntrar: () => void;
   onEscolher: (tier: ModalidadeTier | '') => void;
   onSalvar: () => void;
@@ -123,6 +180,7 @@ const EmpresaCard: React.FC<EmpresaCardProps> = ({
   bloqueado,
   empresa,
   isDark,
+  onAbrirConfiguracao,
   onEntrar,
   onEscolher,
   onSalvar,
@@ -225,6 +283,37 @@ const EmpresaCard: React.FC<EmpresaCardProps> = ({
         />
       </div>
 
+      {/* Configuração do cliente: entra na tela certa já no contexto dele */}
+      <div className={`mt-4 rounded-2xl border p-3 ${borderClass} ${softClass}`}>
+        <p className={`flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.08em] ${mutedClass}`}>
+          <Settings className="h-3.5 w-3.5 shrink-0" />
+          Configuração do cliente
+        </p>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          {ACOES_DA_EMPRESA.map((acao) => {
+            const Icon = acao.icone;
+            return (
+              <button
+                key={acao.destino}
+                type="button"
+                onClick={() => onAbrirConfiguracao(acao)}
+                disabled={bloqueado}
+                className={agentiveSecondaryButtonClass(isDark, 'min-w-0 sm:flex-1')}
+                title={`${acao.detalhe} — abre ${acao.destino} nesta empresa`}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="truncate">{acao.rotulo}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className={`mt-2 text-xs ${faintClass}`}>
+          {empresa.empresa_atual
+            ? 'Estas telas abrem na empresa atual da sessão — nenhuma troca de contexto.'
+            : `Estas telas abrem em ${nome}: a sessão passa a apontar para ela antes de o painel trocar de tela.`}
+        </p>
+      </div>
+
       {/* Modalidade */}
       <div className={`mt-4 rounded-2xl border p-3 ${borderClass} ${softClass}`}>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -272,6 +361,7 @@ const EmpresaCard: React.FC<EmpresaCardProps> = ({
 // --------------------------------------------------------------------------
 const Plataforma: React.FC = () => {
   const { isDark } = useTheme();
+  const navigate = useNavigate();
 
   const [painel, setPainel] = useState<PainelPlataforma | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -285,6 +375,16 @@ const Plataforma: React.FC = () => {
 
   const [empresaParaEntrar, setEmpresaParaEntrar] = useState<EmpresaDaPlataforma | null>(null);
   const [entrando, setEntrando] = useState(false);
+
+  /**
+   * Ação de configuração aguardando confirmação. Só existe quando a empresa NÃO
+   * é a atual: sem troca de contexto não há o que confirmar.
+   */
+  const [acaoPendente, setAcaoPendente] = useState<{
+    acao: AcaoDaEmpresa;
+    empresa: EmpresaDaPlataforma;
+  } | null>(null);
+  const [abrindoConfiguracao, setAbrindoConfiguracao] = useState(false);
 
   const [confirmacaoReducao, setConfirmacaoReducao] = useState<{
     empresa: EmpresaDaPlataforma;
@@ -395,7 +495,51 @@ const Plataforma: React.FC = () => {
     }
   }, []);
 
-  const bloqueado = entrando || salvandoId !== null;
+  /**
+   * Clique na ação de configuração.
+   *
+   * O destino (`/company`, `/equipe`, `/company?tab=teams`) lê a empresa da
+   * SESSÃO e não tem id na URL. Então:
+   *   - empresa já é a atual: nada a trocar, navega direto pelo router (o
+   *     contexto no cliente e no servidor já bate);
+   *   - outra empresa: NÃO navega daqui. Abre a confirmação e só o `confirmar`
+   *     troca o contexto e navega.
+   * Trocar de contexto porque o usuário clicou em "Perfis de permissão" seria
+   * efeito colateral silencioso: daqui em diante o painel inteiro é outro.
+   */
+  const pedirConfiguracao = useCallback(
+    (empresa: EmpresaDaPlataforma, acao: AcaoDaEmpresa) => {
+      if (empresa.empresa_atual) {
+        navigate(acao.destino);
+        return;
+      }
+      setAcaoPendente({ empresa, acao });
+    },
+    [navigate],
+  );
+
+  const abrirConfiguracao = useCallback(
+    async (empresa: EmpresaDaPlataforma, acao: AcaoDaEmpresa) => {
+      setAbrindoConfiguracao(true);
+      try {
+        await adminPlataformaApi.entrar(empresa.id);
+        setAcaoPendente(null);
+        // Navegação DURA, de propósito: empresa atual, permissões e dados de
+        // várias telas vivem em localStorage e em estados já carregados. Pelo
+        // router a tela de destino abriria no contexto antigo — com o título da
+        // nova empresa e os dados da anterior, que é o erro que mente.
+        window.location.href = acao.destino;
+      } catch (e) {
+        // A troca falhou: nada de navegar. O `detail` do backend é a mensagem,
+        // e o modal fica aberto para o usuário tentar de novo.
+        setAbrindoConfiguracao(false);
+        toast.error(mensagemDeErro(e));
+      }
+    },
+    [],
+  );
+
+  const bloqueado = entrando || abrindoConfiguracao || salvandoId !== null;
   const empresas = painel?.empresas ?? [];
 
   return (
@@ -404,7 +548,7 @@ const Plataforma: React.FC = () => {
         <AgentivePageHeader
           icon={Layers}
           title="Clientes da plataforma"
-          description="Todos os clientes, com os números que decidem a modalidade. Entrar em uma empresa troca o contexto da sua sessão; salvar a modalidade vale para a empresa da linha."
+          description="Todos os clientes, com os números que decidem a modalidade. As ações de configuração abrem a tela do cliente no contexto dele; salvar a modalidade vale para a empresa da linha."
           badges={
             painel ? (
               <span className={agentivePillClass(isDark, false)}>
@@ -414,15 +558,21 @@ const Plataforma: React.FC = () => {
             ) : undefined
           }
           actions={
-            <button
-              type="button"
-              onClick={carregar}
-              disabled={carregando}
-              className={agentiveSecondaryButtonClass(isDark)}
-            >
-              <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} />
-              Atualizar
-            </button>
+            <>
+              <Link to="/new-company-admin" className={agentivePrimaryButtonClass()}>
+                <Plus className="h-4 w-4" />
+                Nova empresa cliente
+              </Link>
+              <button
+                type="button"
+                onClick={carregar}
+                disabled={carregando}
+                className={agentiveSecondaryButtonClass(isDark)}
+              >
+                <RefreshCw className={`h-4 w-4 ${carregando ? 'animate-spin' : ''}`} />
+                Atualizar
+              </button>
+            </>
           }
         />
 
@@ -464,7 +614,13 @@ const Plataforma: React.FC = () => {
           <AgentiveEmptyState
             icon={Building2}
             title="Nenhuma empresa cadastrada"
-            description="A plataforma ainda não tem clientes para listar. Quando a primeira empresa existir, ela aparece aqui."
+            description="A plataforma ainda não tem clientes para listar. Cadastre a primeira empresa cliente: ela aparece aqui, com as ações de configuração."
+            action={
+              <Link to="/new-company-admin" className={agentivePrimaryButtonClass()}>
+                <Plus className="h-4 w-4" />
+                Nova empresa cliente
+              </Link>
+            }
           />
         )}
 
@@ -484,6 +640,7 @@ const Plataforma: React.FC = () => {
                   if (tier) salvarModalidade(empresa, tier);
                 }}
                 onEntrar={() => setEmpresaParaEntrar(empresa)}
+                onAbrirConfiguracao={(acao) => pedirConfiguracao(empresa, acao)}
               />
             ))}
           </div>
@@ -514,6 +671,35 @@ const Plataforma: React.FC = () => {
         }}
         onConfirm={() => {
           if (empresaParaEntrar) entrarNaEmpresa(empresaParaEntrar);
+        }}
+      />
+
+      {/* Confirmação de troca de contexto ao abrir a configuração do cliente */}
+      <AgentiveConfirmModal
+        isOpen={Boolean(acaoPendente)}
+        title="Abrir a configuração desta empresa?"
+        variant="warning"
+        confirmText="Trocar contexto e abrir"
+        cancelText="Cancelar"
+        isLoading={abrindoConfiguracao}
+        message={
+          acaoPendente ? (
+            <>
+              Para abrir <strong>{acaoPendente.acao.rotulo}</strong> de{' '}
+              <strong>{nomeDaEmpresa(acaoPendente.empresa)}</strong>, a sessão passa a apontar para esta
+              empresa — a tela de destino lê a empresa da sessão, não um id na URL. O painel então carrega em{' '}
+              <code className="text-xs">{acaoPendente.acao.destino}</code>. Nada é alterado em nenhuma das duas
+              empresas, e você volta para a atual pelo próprio painel de Clientes da plataforma.
+            </>
+          ) : (
+            ''
+          )
+        }
+        onClose={() => {
+          if (!abrindoConfiguracao) setAcaoPendente(null);
+        }}
+        onConfirm={() => {
+          if (acaoPendente) abrirConfiguracao(acaoPendente.empresa, acaoPendente.acao);
         }}
       />
 
