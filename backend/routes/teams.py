@@ -92,12 +92,19 @@ class AssignUserRequest(BaseModel):
     user_id: int
 
 
+# Quem administra perfis de permissao da PROPRIA clinica. `clinic_admin` entra
+# porque administra usuarios e precisa listar os perfis para poder atribui-los —
+# sem isso a tela de acessos so funcionava para o dono da conta. O escopo segue a
+# empresa do usuario logado (`_current_company_id`), nunca outra clinica.
+PAPEIS_QUE_ADMINISTRAM_EQUIPES = ("admin", "manager", "clinic_admin")
+
+
 async def validate_master_or_admin_access(current_user: Union[Client, User]) -> Union[Client, User]:
     """Valida se o usuário atual pode administrar equipes."""
     if isinstance(current_user, Client):
         return current_user
 
-    if isinstance(current_user, User) and current_user.role in ["admin", "manager"]:
+    if isinstance(current_user, User) and current_user.role in PAPEIS_QUE_ADMINISTRAM_EQUIPES:
         return current_user
 
     logger.warning("Tentativa de acesso não autorizado às equipes por: %s", current_user.email)
