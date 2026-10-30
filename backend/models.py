@@ -2383,8 +2383,10 @@ class CompanyAssinatura(Base):
     __tablename__ = "company_assinaturas"
 
     id = Column(Integer, primary_key=True)
+    # Sem `index=True`: o indice tem nome explicito e e declarado em __table_args__,
+    # igual ao que a migration 0014 criou. Nome automatico aqui vira drift.
     company_id = Column(
-        BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+        BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
     )
     plano_id = Column(
         Integer, ForeignKey("planos.id", ondelete="RESTRICT"), nullable=False
@@ -2405,6 +2407,15 @@ class CompanyAssinatura(Base):
         ),
         CheckConstraint(
             "dia_vencimento BETWEEN 1 AND 28", name="ck_assinatura_dia_vencimento"
+        ),
+        Index("ix_assinatura_company", "company_id"),
+        # Regra de negocio, nao indice de performance: garante no banco que existe
+        # UMA assinatura ativa por empresa. Encerradas continuam no historico.
+        Index(
+            "uq_assinatura_ativa_por_empresa",
+            "company_id",
+            unique=True,
+            postgresql_where=text("status = 'ativa'"),
         ),
     )
 
