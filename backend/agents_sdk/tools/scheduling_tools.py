@@ -241,9 +241,9 @@ PADRÕES TEMPORAIS MELHORADOS (baseados em conversas reais):
 
 2. RESTRIÇÕES DE HORÁRIO (CRÍTICO - DETECTE SEMPRE):
 - "depois das 11" → horário mínimo 12:00 (NOTA: "depois de 11" = 12:00 ou mais tarde)
-- "depois das 14h" → horário mínimo 15:00 (NOTA: "depois de 14" = 15:00 ou mais tarde)
-- "depois das 15" → horário mínimo 16:00 (NOTA: "depois de 15" = 16:00 ou mais tarde)
-- "só posso depois das 15" → horário mínimo 16:00
+- "depois das 14h" → horário mínimo 14:00 (NUNCA some uma hora ao horário citado)
+- "depois das 15" → horário mínimo 15:00
+- "só posso depois das 15" → horário mínimo 15:00
 - "após às 15h" → horário mínimo 16:00
 - "a partir das 16h" → horário mínimo 16:00
 - "só se for depois das X" → horário mínimo X+1
@@ -274,7 +274,14 @@ Extract scheduling preferences considering conversation context and temporal map
 
 CRITICAL RULES FOR TIME RESTRICTIONS:
 - If user says "depois das X" or "só posso depois das X", you MUST set time_restrictions.type="after"
-- "depois das 15" means min_time="16:00" (NOT 15:00 - they want AFTER 15, not AT 15)
+- HORARIO EXATO (REGRA CRITICA): quando o cliente cita um horário específico — "às 14h",
+  "as 14", "14 horas", "14:00", "quarta às 14" — use time_restrictions.type="exact",
+  min_time="14:00", max_time="14:00" e specific_times=["14:00"]. NUNCA acrescente uma hora
+  ao horário pedido e NUNCA transforme horário exato em "after". "às 14h" é 14:00.
+- Exemplos de horário EXATO:
+  - "quarta às 14h" → {{"weekday_name": "Quarta-feira", "time_preference": "specific", "specific_times": ["14:00"], "time_restrictions": {{"type": "exact", "min_time": "14:00", "max_time": "14:00"}}}}
+  - "tem às 9?" → {{"time_preference": "specific", "specific_times": ["09:00"], "time_restrictions": {{"type": "exact", "min_time": "09:00", "max_time": "09:00"}}}}
+- "depois das 15" means min_time="15:00" — the cited hour is the FLOOR, never +1h
 - "depois das 14" means min_time="15:00" (NOT 14:00 - they want AFTER 14, not AT 14)
 - Always add 1 hour to the mentioned time for "depois das" phrases
 
@@ -309,10 +316,10 @@ NOVOS EXEMPLOS (baseados em conversas reais):
 - "outra semana" → {{"urgency": "next_week", "time_preference": "flexible"}}
 - "depois das 11" → {{"time_periods": ["tarde"], "time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "12:00", "max_time": null}}}}
 - "só posso depois das 11" → {{"time_periods": ["tarde"], "time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "12:00", "max_time": null}}}}
-- "depois das 14h" → {{"time_periods": ["tarde", "noite"], "time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "15:00", "max_time": null}}}}
-- "só posso depois das 15" → {{"time_periods": ["tarde", "noite"], "time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "16:00", "max_time": null}}}}
+- "depois das 14h" → {{"time_periods": ["tarde", "noite"], "time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "14:00", "max_time": null}}}}
+- "só posso depois das 15" → {{"time_periods": ["tarde", "noite"], "time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "15:00", "max_time": null}}}}
 - "segunda feira pela manhã" → {{"weekday_name": "Segunda-feira", "time_periods": ["manha"], "time_preference": "flexible", "time_restrictions": {{"type": "none", "min_time": null, "max_time": null}}}}
-- "só se for depois das 15h" → {{"time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "16:00", "max_time": null}}}}
+- "só se for depois das 15h" → {{"time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "15:00", "max_time": null}}}}
 - "na próxima semana de tarde" → {{"urgency": "next_week", "time_periods": ["tarde"], "time_preference": "flexible", "time_restrictions": {{"type": "none", "min_time": null, "max_time": null}}}}
 - "Tem segunda depois das 11?" → {{"weekday_name": "Segunda-feira", "specific_date": "[usar mapeamento]", "time_preference": "restricted", "time_restrictions": {{"type": "after", "min_time": "12:00", "max_time": null}}}}
 
@@ -1073,6 +1080,34 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
 
                     all_slots = date_filtered_slots
                     logger.critical(f"[DATE_FILTER_FIX_RESULT] Filtered from original to {len(date_filtered_slots)} slots (blocked same-day appointments)")
+
+                # Horario EXATO ("as 14h"). Antes disso o analisador convertia 14h em
+                # "depois das 15h" e o paciente recebia oferta de 15h tendo pedido 14h —
+                # mesmo com 14:00 livre na agenda.
+                if time_restrictions.get("type") == "exact" and time_restrictions.get("min_time"):
+                    alvo_hora = str(time_restrictions["min_time"])
+                    try:
+                        hh, mm = alvo_hora.split(":")[:2]
+                        alvo_min = int(hh) * 60 + int(mm)
+                    except Exception:
+                        alvo_min = None
+                    if alvo_min is not None:
+                        exatos = []
+                        for slot in all_slots:
+                            slot_str = slot["slot"] if isinstance(slot, dict) and "slot" in slot else slot
+                            if not (isinstance(slot_str, str) and " " in slot_str):
+                                continue
+                            try:
+                                sh, sm = slot_str.split(" ")[1].split(":")[:2]
+                                minutos = int(sh) * 60 + int(sm)
+                            except Exception:
+                                continue
+                            if abs(minutos - alvo_min) <= 30:
+                                exatos.append(slot)
+                        logger.critical(
+                            f"[EXACT_TIME] pedido={alvo_hora} mantidos={len(exatos)} de {len(all_slots)}"
+                        )
+                        all_slots = exatos
 
                 # NEW: Apply time restrictions filtering (depois das X)
                 if time_restrictions.get("type") == "after" and time_restrictions.get("min_time"):
