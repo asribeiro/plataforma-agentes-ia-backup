@@ -424,7 +424,9 @@ app.include_router(clinic_audit_routes.router)
 # do admin e troca a modalidade de QUALQUER empresa. Sem isto o admin master so
 # conseguia mexer na empresa em que estava.
 from backend.routes import admin_platform_routes  # noqa: E402
+from backend.routes.admin_billing_routes import router as admin_billing_router
 app.include_router(admin_platform_routes.router)
+app.include_router(admin_billing_router, prefix="/api/admin", tags=["Admin Cobranca"])
 app.include_router(teams_router, prefix="/api", tags=["teams"])
 app.include_router(business_types_router, tags=["Business Types"])
 app.include_router(no_show_router, prefix="/api/agenda")
