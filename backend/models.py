@@ -2333,3 +2333,98 @@ class ClinicalAccessLog(Base):
         Index("idx_clinical_access_patient", "patient_id", "created_at"),
         Index("idx_clinical_access_user", "user_id", "created_at"),
     )
+
+
+# ---------------------------------------------------------------------------
+# Cobranca (migration 0013). O REGISTRO e manual: a cobranca de verdade e feita
+# por parceiro com plataforma de pagamento. Aqui ficam o combinado (plano e
+# assinatura) e o que foi quitado (faturas por competencia).
+# ---------------------------------------------------------------------------
+
+
+class Plano(Base):
+    """Catalogo comercial. `tier` liga o plano a faixa tecnica da modalidade."""
+
+    __tablename__ = "planos"
+
+    id = Column(Integer, primary_key=True)
+    nome = Column(String(80), nullable=False, unique=True)
+    tier = Column(String(20), nullable=False, index=True)
+    # NULO = preco ainda nao combinado. Emitir fatura exige preco; zero seria
+    # mentira (pareceria plano gratuito).
+    preco_centavos = Column(Integer, nullable=True)
+    ciclo = Column(String(20), nullable=False, server_default="mensal")
+    ativo = Column(Boolean, nullable=False, server_default=text("true"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint("tier IN ('mono','up_to_4','up_to_10')", name="ck_planos_tier"),
+        CheckConstraint(
+            "preco_centavos IS NULL OR preco_centavos >= 0",
+            name="ck_planos_preco_nao_negativo",
+        ),
+    )
+
+
+class CompanyAssinatura(Base):
+    """Contrato comercial de uma empresa. Uma ATIVA por empresa (indice parcial)."""
+
+    __tablename__ = "company_assinaturas"
+
+    id = Column(Integer, primary_key=True)
+    company_id = Column(
+        BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    plano_id = Column(
+        Integer, ForeignKey("planos.id", ondelete="RESTRICT"), nullable=False
+    )
+    status = Column(String(20), nullable=False, server_default="ativa")
+    # Dia 29-31 nao existe em todo mes: o CHECK limita a 28.
+    dia_vencimento = Column(Integer, nullable=False, server_default="1")
+    inicio = Column(Date, nullable=False, server_default=func.current_date())
+    observacao = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(
+        TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ativa','suspensa','encerrada')", name="ck_assinatura_status"
+        ),
+        CheckConstraint(
+            "dia_vencimento BETWEEN 1 AND 28", name="ck_assinatura_dia_vencimento"
+        ),
+    )
+
+
+class Fatura(Base):
+    """Fatura mensal por competencia. `valor_centavos` e snapshot da emissao."""
+
+    __tablename__ = "faturas"
+
+    id = Column(Integer, primary_key=True)
+    company_id = Column(
+        BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False
+    )
+    assinatura_id = Column(
+        Integer, ForeignKey("company_assinaturas.id", ondelete="SET NULL"), nullable=True
+    )
+    competencia = Column(String(7), nullable=False)  # AAAA-MM
+    valor_centavos = Column(Integer, nullable=False)
+    vencimento = Column(Date, nullable=False)
+    status = Column(String(20), nullable=False, server_default="aberta")
+    pago_em = Column(TIMESTAMP(timezone=True), nullable=True)
+    observacao = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("company_id", "competencia", name="uq_fatura_competencia"),
+        CheckConstraint("status IN ('aberta','paga','cancelada')", name="ck_faturas_status"),
+        CheckConstraint("valor_centavos >= 0", name="ck_faturas_valor"),
+        Index("ix_faturas_company_competencia", "company_id", "competencia"),
+        Index("ix_faturas_status", "status"),
+    )
