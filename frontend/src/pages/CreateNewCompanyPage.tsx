@@ -294,11 +294,10 @@ const NewCompanyAdminPage: React.FC = () => {
               <Field label="UF do CRO"><input className={agentiveInputClass(isDark)} maxLength={2} value={payload.technical_responsible_cro_uf || ''} onChange={(e) => update('technical_responsible_cro_uf', e.target.value.toUpperCase())} /></Field>
             </Section>
 
-            <Section title="4. Funcionamento">
+            <Section title="4. Atendimento e convênios">
               <Field label="WhatsApp da secretária IA"><input className={agentiveInputClass(isDark)} value={formatPhone(payload.ai_whatsapp || '')} onChange={(e) => update('ai_whatsapp', e.target.value)} /></Field>
               <Field label="Atende convênios?"><select className={agentiveInputClass(isDark)} value={payload.accepts_insurance ? 'yes' : 'no'} onChange={(e) => update('accepts_insurance', e.target.value === 'yes')}><option value="no">Não</option><option value="yes">Sim</option></select></Field>
               {payload.accepts_insurance && <Field label="Convênios aceitos"><input className={agentiveInputClass(isDark)} placeholder="Unimed, Bradesco..." value={payload.accepted_insurance.join(', ')} onChange={(e) => update('accepted_insurance', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))} /></Field>}
-              <Field label="Horários de atendimento"><textarea className={agentiveInputClass(isDark, 'min-h-24')} placeholder="Configure os dias, horários e intervalo de almoço" value={JSON.stringify(payload.business_hours, null, 2)} onChange={(e) => { try { update('business_hours', JSON.parse(e.target.value)); } catch { /* validação final */ } }} /></Field>
             </Section>
 
             <Section title="5. Plano e cobrança">
@@ -308,7 +307,6 @@ const NewCompanyAdminPage: React.FC = () => {
               <Field label="Dias de teste"><input className={agentiveInputClass(isDark)} type="number" min={0} value={payload.trial_days} onChange={(e) => update('trial_days', Number(e.target.value))} /></Field>
               <Field label="Data de início"><input className={agentiveInputClass(isDark)} type="date" value={payload.start_date || ''} onChange={(e) => update('start_date', e.target.value)} /></Field>
               <Field label="E-mail de cobrança"><input className={agentiveInputClass(isDark)} type="email" value={payload.billing_email || ''} onChange={(e) => update('billing_email', e.target.value)} /></Field>
-              <Field label="Forma de pagamento"><input className={agentiveInputClass(isDark)} value={payload.preferred_payment_method || ''} onChange={(e) => update('preferred_payment_method', e.target.value)} /></Field>
             </Section>
           </div>
 
