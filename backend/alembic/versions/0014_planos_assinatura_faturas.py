@@ -1,8 +1,13 @@
 """Planos, assinatura por empresa e faturas (bloco cobranca)
 
-Revision ID: 0013
-Revises: 0012
+Revision ID: 0014
+Revises: 0013
 Create Date: 2026-10-30
+
+NUMERACAO: esta migration era 0013 e virou 0014 porque a 0013 do repo passou a
+ser `platform_settings` (credenciais OAuth), ja aplicada em producao. Revisao do
+alembic e identificador, nao enfeite: com o mesmo numero o `upgrade head` virava
+NO-OP e as tabelas de cobranca nunca eram criadas.
 
 POR QUE ESTA MIGRATION EXISTE
 
@@ -33,8 +38,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0013"
-down_revision: Union[str, None] = "0012"
+revision: str = "0014"
+down_revision: Union[str, None] = "0013"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
