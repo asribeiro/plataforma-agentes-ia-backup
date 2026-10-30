@@ -243,7 +243,10 @@ def quem_sou_eu(db: Session = Depends(get_db), usuario=Depends(get_current_user)
     so descobriria que nao pode administrar depois de tomar um 403, mostrando
     uma tela que nao funciona para quem entrou nela.
     """
-    papel = (getattr(usuario, "role", None) or "").strip()
+    # mesma regra da dependencia: dono do workspace e admin da clinica dele.
+    from backend.services.papel_clinico import _papel_do_usuario
+
+    papel = _papel_do_usuario(usuario)
     nome_prof = None
     professional_id = getattr(usuario, "professional_id", None)
     if professional_id:

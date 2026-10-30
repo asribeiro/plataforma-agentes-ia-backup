@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
 from backend.db import get_db
-from backend.models import ClinicalAccessLog, User
+from backend.models import Client, ClinicalAccessLog, User
 
 logger = logging.getLogger(__name__)
 
@@ -68,13 +68,22 @@ def pode_ver_prontuario(papel: Optional[str]) -> bool:
     return (papel or "").strip() in PAPEIS_QUE_VEEM_PRONTUARIO
 
 
-def _papel_do_usuario(usuario) -> str:
-    """Papel do usuario autenticado, sem quebrar com Client (usuario master).
+PAPEL_DO_DONO_DO_WORKSPACE = "clinic_admin"
 
-    O `get_current_user` devolve User (usuario da clinica) ou Client (master).
-    Client nao tem papel clinico: tratado como vazio, nunca como admin — negar
-    por padrao e o lado certo de errar.
+
+def _papel_do_usuario(usuario) -> str:
+    """Papel do usuario autenticado.
+
+    O `get_current_user` devolve User (usuario da clinica) ou Client (dono da
+    conta/workspace). O Client NAO tem coluna `role` — e por isso ficava sem
+    papel nenhum, tomando 403 na administracao de usuarios e com o menu escondido.
+    Dono da conta e o controlador dos dados da clinica dele: entra como
+    `clinic_admin`, com o acesso auditado como qualquer outro.
+
+    Todo o resto continua negando por padrao.
     """
+    if isinstance(usuario, Client):
+        return PAPEL_DO_DONO_DO_WORKSPACE
     return (getattr(usuario, "role", None) or "").strip()
 
 
