@@ -718,6 +718,9 @@ class Agendamento(Base):
     __table_args__ = (
         UniqueConstraint('client_id', 'lead_id', 'consulta_data', name='agendamento_lead_client_uniq'),
         Index("idx_agendamentos_invite", "invite_sent_at"),
+        # Indice criado pela migration 0012. Declarado aqui de proposito:
+        # indice que vive no banco e nao no modelo vira drift no alembic check.
+        Index("ix_agendamentos_patient_email", "patient_email"),
         # Agenda unica por profissional (migration 0008). Indice parcial: horario
         # cancelado volta a ficar livre, e agenda nula nao colide.
         Index(
