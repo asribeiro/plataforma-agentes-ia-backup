@@ -1165,6 +1165,21 @@ def create_scheduling_tools(slots_service, company_id: int, phone: str = "", age
                     last_resort_slots = await asyncio.to_thread(_fetch_last_resort)
 
                     if last_resort_slots:
+                        # Preferencia pelo MESMO dia pedido: se o paciente quer quarta e
+                        # as 14h estao ocupadas, as alternativas devem ser outras horas da
+                        # quarta. So quando o dia inteiro nao tem vaga e que se oferece
+                        # outro dia — antes o agente pulava dois dias com a quarta livre.
+                        if specific_date:
+                            mesmo_dia = [
+                                s for s in last_resort_slots
+                                if str(s["slot"] if isinstance(s, dict) else s).startswith(str(specific_date))
+                            ]
+                            if mesmo_dia:
+                                logger.critical(
+                                    f"[FALLBACK_SAME_DAY] {len(mesmo_dia)} alternativas em {specific_date}"
+                                )
+                                last_resort_slots = mesmo_dia
+
                         # Tres alternativas: e o que o produto pede quando o horario
                         # solicitado nao esta livre. Antes devolvia a lista inteira.
                         slots = last_resort_slots[:3]
