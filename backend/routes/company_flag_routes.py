@@ -125,21 +125,27 @@ def ler_modalidade(db: Session = Depends(get_db), usuario=Depends(get_current_us
     return _montar(_company_do_usuario(usuario), db, usuario)
 
 
-@router.put("/flag", response_model=ModalidadeOut)
-def definir_modalidade(
-    dados: ModalidadeIn,
-    db: Session = Depends(get_db),
-    usuario=Depends(require_internal_admin),
-):
-    """Troca a modalidade da clinica. Exclusivo do admin da plataforma."""
-    company_id = _company_do_usuario(usuario)
-    tier = (dados.professional_tier or "").strip().lower()
+def aplicar_modalidade(
+    db: Session,
+    company_id: int,
+    tier_pedido: Optional[str],
+    confirmar: bool,
+    usuario,
+) -> ModalidadeOut:
+    """Regra UNICA de troca de modalidade.
+
+    Usada por `PUT /api/company/flag` (empresa em que o admin esta) e por
+    `PUT /api/admin/companies/{id}/modalidade` (empresa escolhida no painel).
+    Extraida para nao existirem duas versoes da regra: rebaixamento bloqueado com
+    profissionais ativos e reducao exigindo confirmacao explicita.
+    """
+    tier = (tier_pedido or "").strip().lower()
 
     if tier not in LIMITE_POR_TIER:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                f"Modalidade '{dados.professional_tier}' inválida. "
+                f"Modalidade '{tier_pedido}' inválida. "
                 f"Use uma de: {', '.join(sorted(LIMITE_POR_TIER))}"
             ),
         )
@@ -148,6 +154,10 @@ def definir_modalidade(
     atual = (
         db.query(Company.max_professionals).filter(Company.id == company_id).scalar()
     )
+    if atual is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Empresa não encontrada"
+        )
     ativos = _ativos(company_id, db)
 
     # Rebaixamento: nunca deixar o limite abaixo de quem ja trabalha na clinica.
@@ -165,7 +175,7 @@ def definir_modalidade(
 
     # Reduzir o limite (sem excedente ainda) pede confirmacao explicita: e uma
     # decisao comercial, nao um ajuste de tela.
-    if atual is not None and novo_limite < int(atual) and not dados.confirmar:
+    if novo_limite < int(atual) and not confirmar:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
@@ -184,3 +194,22 @@ def definir_modalidade(
         company_id, tier, novo_limite, getattr(usuario, "email", "?"),
     )
     return _montar(company_id, db, usuario)
+
+
+@router.put("/flag", response_model=ModalidadeOut)
+def definir_modalidade(
+    dados: ModalidadeIn,
+    db: Session = Depends(get_db),
+    usuario=Depends(require_internal_admin),
+):
+    """Troca a modalidade da clinica em que o admin esta logado.
+
+    Exclusivo do admin da plataforma; a regra vive em `aplicar_modalidade`.
+    """
+    return aplicar_modalidade(
+        db,
+        _company_do_usuario(usuario),
+        dados.professional_tier,
+        bool(dados.confirmar),
+        usuario,
+    )

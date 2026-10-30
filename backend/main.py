@@ -419,6 +419,12 @@ from backend.routes import clinic_users_routes, clinic_audit_routes  # noqa: E40
 
 app.include_router(clinic_users_routes.router)
 app.include_router(clinic_audit_routes.router)
+
+# Painel da plataforma (admin master): lista todas as empresas, troca o contexto
+# do admin e troca a modalidade de QUALQUER empresa. Sem isto o admin master so
+# conseguia mexer na empresa em que estava.
+from backend.routes import admin_platform_routes  # noqa: E402
+app.include_router(admin_platform_routes.router)
 app.include_router(teams_router, prefix="/api", tags=["teams"])
 app.include_router(business_types_router, tags=["Business Types"])
 app.include_router(no_show_router, prefix="/api/agenda")
