@@ -4,6 +4,8 @@ Sao os dois pontos em que a tela precisou contornar o backend (aba forcada na ma
 botoes legados escondidos). Se estes testes passam, o contorno deixa de ser
 necessario — e o proximo que mexer nao reintroduz.
 """
+from types import SimpleNamespace
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -66,8 +68,8 @@ def app(db):
     app = FastAPI()
     app.include_router(ci.router, prefix="/api/integrations/calendar")
     app.dependency_overrides[get_db] = lambda: db
-    app.dependency_overrides[ci.require_calendar_company_access] = lambda: type(
-        "U", (), {"id": 7}
+    app.dependency_overrides[ci.require_google_agenda_company_access] = lambda: type(
+        "U", (), {"id": 7, "role": "clinic_admin"}
     )()
     return app
 
@@ -88,7 +90,7 @@ def test_quem_autorizou_uma_agenda_volta_para_a_tela_de_agendas(cenario, app, mo
         def fetch_token(self, code=None):
             pass
 
-    monkeypatch.setattr(ci, "_new_oauth_flow", lambda: FlowFalso())
+    monkeypatch.setattr(ci, "_new_oauth_flow", lambda *a, **k: FlowFalso())
     monkeypatch.setattr(ci, "build_google_oauth_service", lambda *a, **k: object())
     monkeypatch.setattr(
         ci,
@@ -121,6 +123,20 @@ def test_o_erro_do_oauth_diz_qual_agenda_falhou(cenario, app):
     )
 
 
+def test_profissional_nao_inicia_oauth_para_agenda_de_outro_profissional(cenario, app):
+    import backend.routes.integrations.calendar_integration as ci
+
+    cenario["agenda"].professional_id = 41
+    app.dependency_overrides[ci.require_google_agenda_company_access] = lambda: SimpleNamespace(
+        role="service_professional",
+        professional_id=42,
+    )
+    resposta = TestClient(app).get(
+        f"/api/integrations/calendar/google/{EMPRESA}/oauth/start?agenda_id={cenario['agenda'].id}"
+    )
+    assert resposta.status_code == 403
+
+
 def test_sem_agenda_o_destino_continua_sendo_a_tela_da_empresa(cenario, app, monkeypatch):
     import backend.routes.integrations.calendar_integration as ci
 
@@ -136,7 +152,7 @@ def test_sem_agenda_o_destino_continua_sendo_a_tela_da_empresa(cenario, app, mon
         def fetch_token(self, code=None):
             pass
 
-    monkeypatch.setattr(ci, "_new_oauth_flow", lambda: FlowFalso())
+    monkeypatch.setattr(ci, "_new_oauth_flow", lambda *a, **k: FlowFalso())
     monkeypatch.setattr(ci, "build_google_oauth_service", lambda *a, **k: object())
     monkeypatch.setattr(ci, "_list_writable_calendars", lambda s: [{"id": "cal-x", "primary": True}])
 

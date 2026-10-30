@@ -518,26 +518,33 @@ class DatabaseSchedulingService:
             return []
 
     def _fetch_google_unavailable_intervals(self, integration_conf: Dict[str, str]) -> List[Dict[str, datetime]]:
-        """Fetch Google Calendar unavailable intervals (same logic as original)"""
+        """Fetch blocks using only the credential attached to the local agenda."""
         try:
-            from backend.models import CalendarIntegration
+            from backend.models import Agenda
             from backend.prompt.scheduling.google_calendar_integration import obter_eventos_calendario
-            from backend.routes.integrations.google_calendar_service import build_google_oauth_service
+            from backend.services.google_credencial import (
+                build_service_da_agenda,
+                calendar_id_da_agenda,
+            )
 
-            calendar_id = integration_conf["google_calendar_id"]
+            agenda_id = integration_conf.get("agenda_id")
+            if not agenda_id:
+                return []
+
+            agenda = self.db.query(Agenda).filter(
+                Agenda.id == agenda_id,
+                Agenda.company_id == self.company_id,
+            ).first()
+            if not agenda:
+                return []
+
+            calendar_id = calendar_id_da_agenda(self.db, self.company_id, agenda)
             if not calendar_id:
                 return []
 
-            integration = self.db.query(CalendarIntegration).filter(
-                CalendarIntegration.company_id == self.company_id,
-                CalendarIntegration.provider == "google",
-            ).first()
-            if not integration or not integration.google_oauth_token:
-                logger.warning("[DatabaseSchedulingService] Google Calendar OAuth not connected")
-                return []
-
-            service = build_google_oauth_service(integration, self.db)
+            service, _fonte = build_service_da_agenda(self.db, self.company_id, agenda)
             if not service:
+                logger.info("[DatabaseSchedulingService] Google OAuth not connected for agenda=%s", agenda_id)
                 return []
 
             start_dt = datetime.now(self.company_tz).replace(hour=0, minute=0, second=0, microsecond=0)

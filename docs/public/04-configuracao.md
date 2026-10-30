@@ -135,11 +135,34 @@ O envio é habilitado somente quando `SMTP_HOST` e `SMTP_FROM_EMAIL` estão pree
 
 Quando um novo workspace exigir definição de senha e o SMTP não entregar a mensagem, a interface mostra ao administrador autorizado um link temporário somente na confirmação atual. Copie-o e envie por um canal seguro; não registre esse link em logs, tickets ou documentação.
 
-## Integrações opcionais
+## Google Agenda por profissional
+
+Cada agenda local é conectada separadamente à conta Google do profissional correspondente. O Admin da plataforma gerencia os profissionais de qualquer empresa, o Admin Clínica gerencia os da própria clínica; cada profissional também pode conectar e gerenciar a própria agenda. A credencial não é compartilhada nem herdada da clínica.
+
+No Google Cloud, habilite a Google Calendar API e crie um cliente OAuth do tipo **Aplicativo da Web**. Cadastre como URI de redirecionamento autorizado exatamente o endereço configurado em `GOOGLE_OAUTH_REDIRECT_URI`:
+
+```text
+Desenvolvimento: http://localhost:3004/api/integrations/calendar/google/oauth/callback
+Produção:        https://app.seudominio.com.br/api/integrations/calendar/google/oauth/callback
+```
+
+Configure no ambiente **do backend**:
+
+```dotenv
+GOOGLE_OAUTH_CLIENT_ID=
+GOOGLE_OAUTH_CLIENT_SECRET=
+GOOGLE_OAUTH_REDIRECT_URI=https://app.seudominio.com.br/api/integrations/calendar/google/oauth/callback
+GOOGLE_OAUTH_FRONTEND_REDIRECT_ORIGIN=https://app.seudominio.com.br
+```
+
+Em desenvolvimento, use os valores locais de `.env.development.example`. Reinicie o backend após alterar as variáveis. O Client ID e o Client Secret identificam o aplicativo OAuth da instalação; são configurados pelo operador do servidor, uma vez, e não devem ser solicitados nem armazenados no navegador. Na plataforma, abra **Agenda → Integrações**, selecione o profissional (o profissional precisa ter uma agenda) e use o cartão **Google Calendar desta agenda** para autorizar a conta e escolher o calendário.
+
+Nunca coloque o Client Secret em variáveis `VITE_*`, no frontend ou em mensagens. Não compartilhe arquivos `.env` nem tokens OAuth.
+
+## Outras integrações opcionais
 
 Configure apenas as integrações que usar:
 
-- Google OAuth/Calendar: conexão de calendários.
 - Serviços de voz: chaves e vozes do provedor escolhido.
 
 Uma integração desabilitada não deve receber valores fictícios parecidos com credenciais reais. Prefira campo vazio e valide no ambiente de homologação antes de produção.

@@ -15,15 +15,15 @@ import { api } from './api';
 
 const BASE = '/api/integrations/calendar';
 
-export type GoogleAgendaFonteCredencial = 'agenda' | 'empresa' | null;
+export type GoogleAgendaFonteCredencial = 'agenda' | null;
 
 export interface GoogleAgendaStatus {
   agenda_id: number;
   agenda_nome: string;
-  /** 'agenda' = credencial própria do profissional; 'empresa' = herdada; null = nenhuma. */
+  /** 'agenda' = credencial própria do profissional; null = nenhuma. */
   fonte_credencial: GoogleAgendaFonteCredencial;
   credencial_propria: boolean;
-  /** true quando existe credencial efetiva (da agenda OU da empresa). */
+  /** true quando existe credencial própria desta agenda. */
   google_connected: boolean;
   google_account_email: string | null;
   google_calendar_id: string | null;
@@ -87,20 +87,21 @@ export function mensagemDeErroGoogleAgenda(erro: unknown, fallback: string): str
   return fallback;
 }
 
-function obterCompanyId(): string {
+function obterCompanyId(override?: number | string | null): string {
+  if (override) return String(override);
   const companyId = localStorage.getItem('company_id') || localStorage.getItem('clinic_id');
   if (!companyId) throw new Error('company_id não encontrado na sessão.');
   return companyId;
 }
 
-function urlAgenda(agendaId: number, sufixo: string): string {
-  return `${BASE}/google/${obterCompanyId()}/agendas/${agendaId}${sufixo}`;
+function urlAgenda(agendaId: number, sufixo: string, companyId?: number | string | null): string {
+  return `${BASE}/google/${obterCompanyId(companyId)}/agendas/${agendaId}${sufixo}`;
 }
 
 /** GET /google/{company_id}/agendas/{agenda_id}/status */
-export async function obterStatusGoogleDaAgenda(agendaId: number): Promise<GoogleAgendaStatus> {
+export async function obterStatusGoogleDaAgenda(agendaId: number, companyId?: number | string | null): Promise<GoogleAgendaStatus> {
   try {
-    const resp = await api.get<GoogleAgendaStatus>(urlAgenda(agendaId, '/status'));
+    const resp = await api.get<GoogleAgendaStatus>(urlAgenda(agendaId, '/status', companyId));
     return resp.data;
   } catch (erro) {
     throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao consultar o Google desta agenda.'));
@@ -111,11 +112,15 @@ export async function obterStatusGoogleDaAgenda(agendaId: number): Promise<Googl
  * GET /google/{company_id}/oauth/start?agenda_id={id}
  * Devolve a URL de autorização do Google DA AGENDA. Quem chama redireciona.
  */
-export async function iniciarOAuthGoogleDaAgenda(agendaId: number): Promise<string> {
+export async function iniciarOAuthGoogleDaAgenda(
+  agendaId: number,
+  companyId?: number | string | null,
+  returnTo?: 'integrations' | 'calendar',
+): Promise<string> {
   try {
     const resp = await api.get<{ authorization_url: string }>(
-      `${BASE}/google/${obterCompanyId()}/oauth/start`,
-      { params: { agenda_id: agendaId } },
+      `${BASE}/google/${obterCompanyId(companyId)}/oauth/start`,
+      { params: { agenda_id: agendaId, ...(returnTo ? { return_to: returnTo } : {}) } },
     );
     if (!resp.data?.authorization_url) {
       throw new Error('O servidor não devolveu a URL de autorização do Google.');
@@ -127,9 +132,9 @@ export async function iniciarOAuthGoogleDaAgenda(agendaId: number): Promise<stri
 }
 
 /** GET /google/{company_id}/agendas/{agenda_id}/calendars */
-export async function listarCalendariosGoogleDaAgenda(agendaId: number): Promise<GoogleAgendaCalendarios> {
+export async function listarCalendariosGoogleDaAgenda(agendaId: number, companyId?: number | string | null): Promise<GoogleAgendaCalendarios> {
   try {
-    const resp = await api.get<GoogleAgendaCalendarios>(urlAgenda(agendaId, '/calendars'));
+    const resp = await api.get<GoogleAgendaCalendarios>(urlAgenda(agendaId, '/calendars', companyId));
     return { fonte_credencial: resp.data?.fonte_credencial ?? null, calendars: resp.data?.calendars ?? [] };
   } catch (erro) {
     throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao listar os calendários Google desta agenda.'));
@@ -140,10 +145,11 @@ export async function listarCalendariosGoogleDaAgenda(agendaId: number): Promise
 export async function definirCalendarioGoogleDaAgenda(
   agendaId: number,
   googleCalendarId: string,
+  companyId?: number | string | null,
 ): Promise<GoogleAgendaCalendarioSelecionado> {
   try {
     const resp = await api.post<{ status: string; calendar: GoogleAgendaCalendarioSelecionado }>(
-      urlAgenda(agendaId, '/calendar'),
+      urlAgenda(agendaId, '/calendar', companyId),
       { google_calendar_id: googleCalendarId },
     );
     return resp.data?.calendar ?? {};
@@ -154,13 +160,103 @@ export async function definirCalendarioGoogleDaAgenda(
 
 /**
  * DELETE /google/{company_id}/agendas/{agenda_id}/credential
- * Remove a credencial PRÓPRIA da agenda: ela volta a usar a da empresa, se houver.
+ * Remove a credencial própria da agenda.
  */
-export async function removerCredencialGoogleDaAgenda(agendaId: number): Promise<GoogleAgendaCredencialRemovida> {
+export async function removerCredencialGoogleDaAgenda(agendaId: number, companyId?: number | string | null): Promise<GoogleAgendaCredencialRemovida> {
   try {
-    const resp = await api.delete<GoogleAgendaCredencialRemovida>(urlAgenda(agendaId, '/credential'));
+    const resp = await api.delete<GoogleAgendaCredencialRemovida>(urlAgenda(agendaId, '/credential', companyId));
     return resp.data;
   } catch (erro) {
     throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao desconectar o Google desta agenda.'));
+  }
+}
+
+export interface GoogleAgendaProfissional {
+  professional_id: number;
+  professional_name: string;
+  company_id: number;
+  company_name: string;
+  agenda_id: number | null;
+  agenda_name: string | null;
+  google_connected: boolean;
+  google_account_email: string | null;
+  google_calendar_summary: string | null;
+}
+
+/** GET /google-agendas/profissionais — escopo definido pelo papel no backend. */
+export async function listarProfissionaisGoogleAgenda(): Promise<GoogleAgendaProfissional[]> {
+  try {
+    const resp = await api.get<{ items: GoogleAgendaProfissional[] }>(`${BASE}/google-agendas/profissionais`);
+    return resp.data?.items ?? [];
+  } catch (erro) {
+    throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao listar os profissionais.'));
+  }
+}
+
+export interface GoogleOAuthAppStatus {
+  configured: boolean;
+  source: 'plataforma' | 'ambiente' | null;
+  client_id: string | null;
+  redirect_uri: string;
+  can_configure: boolean;
+}
+
+export async function obterGoogleOAuthApp(): Promise<GoogleOAuthAppStatus> {
+  try {
+    return (await api.get<GoogleOAuthAppStatus>(`${BASE}/google-oauth/app`)).data;
+  } catch (erro) {
+    throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao consultar as credenciais do Google.'));
+  }
+}
+
+export async function salvarGoogleOAuthApp(clientId: string, clientSecret: string): Promise<GoogleOAuthAppStatus> {
+  try {
+    return (
+      await api.put<GoogleOAuthAppStatus>(`${BASE}/google-oauth/app`, {
+        client_id: clientId,
+        client_secret: clientSecret,
+      })
+    ).data;
+  } catch (erro) {
+    throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao salvar as credenciais do Google.'));
+  }
+}
+
+export async function removerGoogleOAuthApp(): Promise<GoogleOAuthAppStatus> {
+  try {
+    return (await api.delete<GoogleOAuthAppStatus>(`${BASE}/google-oauth/app`)).data;
+  } catch (erro) {
+    throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao remover as credenciais do Google.'));
+  }
+}
+
+export interface GoogleAgendaEvento {
+  id: string | null;
+  summary: string;
+  start: string;
+  end: string;
+  all_day: boolean;
+}
+
+export interface GoogleAgendaEventos {
+  connected: boolean;
+  events: GoogleAgendaEvento[];
+  error: string | null;
+}
+
+/** GET /google/{company_id}/agendas/{agenda_id}/events — compromissos do Google no período. */
+export async function listarEventosGoogleDaAgenda(
+  agendaId: number,
+  inicioIso: string,
+  fimIso: string,
+  companyId?: number | string | null,
+): Promise<GoogleAgendaEventos> {
+  try {
+    const resp = await api.get<GoogleAgendaEventos>(urlAgenda(agendaId, '/events', companyId), {
+      params: { start: inicioIso, end: fimIso },
+    });
+    return resp.data;
+  } catch (erro) {
+    throw new Error(mensagemDeErroGoogleAgenda(erro, 'Erro ao carregar os compromissos do Google.'));
   }
 }

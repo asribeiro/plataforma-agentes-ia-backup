@@ -24,10 +24,8 @@ import {
 /**
  * 'Google Calendar desta agenda'.
  *
- * O ponto do card é a distinção que o dono não consegue ver sozinho: quem
- * autorizou o Google — o profissional (credencial própria da agenda) ou a
- * clínica (credencial da empresa). Sem dizer isso em texto, ele acha que
- * autorizou a conta dele e não autorizou.
+ * Cada cartão representa uma credencial OAuth independente, armazenada na
+ * agenda do profissional correspondente.
  */
 interface AgendaGoogleCalendarCardProps {
     agendaId: number;
@@ -38,6 +36,12 @@ interface AgendaGoogleCalendarCardProps {
     onStatusCarregado?: (status: GoogleAgendaStatus) => void;
     /** true quando a pessoa acabou de voltar do OAuth desta agenda. */
     recemConectado?: boolean;
+    /** Apenas Admin Clínica ou o profissional dono da agenda pode alterar a conexão. */
+    podeGerenciar?: boolean;
+    /** Empresa da agenda; omitido = empresa da sessão. O admin da plataforma precisa informar. */
+    companyId?: number | null;
+    /** Para onde o OAuth devolve a pessoa. */
+    returnTo?: 'integrations' | 'calendar';
 }
 
 export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> = ({
@@ -46,6 +50,9 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
     onAlterado,
     onStatusCarregado,
     recemConectado = false,
+    podeGerenciar = false,
+    companyId,
+    returnTo,
 }) => {
     const { isDark } = useTheme();
 
@@ -76,7 +83,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
         setCarregando(true);
         setErroStatus(null);
         try {
-            const dados = await obterStatusGoogleDaAgenda(agendaId);
+            const dados = await obterStatusGoogleDaAgenda(agendaId, companyId);
             setStatus(dados);
             statusCarregadoRef.current?.(dados);
         } catch (erro) {
@@ -85,12 +92,12 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
         } finally {
             setCarregando(false);
         }
-    }, [agendaId]);
+    }, [agendaId, companyId]);
 
     const carregarCalendarios = useCallback(async () => {
         setCarregandoCalendarios(true);
         try {
-            const dados = await listarCalendariosGoogleDaAgenda(agendaId);
+            const dados = await listarCalendariosGoogleDaAgenda(agendaId, companyId);
             const lista = dados.calendars ?? [];
             setCalendarios(lista);
             const atual = status?.google_calendar_id;
@@ -103,7 +110,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
         } finally {
             setCarregandoCalendarios(false);
         }
-    }, [agendaId, status?.google_calendar_id]);
+    }, [agendaId, companyId, status?.google_calendar_id]);
 
     useEffect(() => {
         setStatus(null);
@@ -130,7 +137,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
     const conectar = async () => {
         setSalvando(true);
         try {
-            const authorizationUrl = await iniciarOAuthGoogleDaAgenda(agendaId);
+            const authorizationUrl = await iniciarOAuthGoogleDaAgenda(agendaId, companyId, returnTo);
             window.location.href = authorizationUrl;
         } catch (erro) {
             toast.error(erro instanceof Error ? erro.message : 'Erro ao iniciar a conexão com o Google desta agenda.');
@@ -145,7 +152,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
         }
         setSalvando(true);
         try {
-            const calendario = await definirCalendarioGoogleDaAgenda(agendaId, calendarioEscolhido);
+            const calendario = await definirCalendarioGoogleDaAgenda(agendaId, calendarioEscolhido, companyId);
             toast.success(`Calendário “${calendario.summary || calendario.id || calendarioEscolhido}” vinculado a esta agenda.`);
             setMostrarSeletor(false);
             setCalendarios(null);
@@ -161,7 +168,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
     const desconectar = async () => {
         setSalvando(true);
         try {
-            const resposta = await removerCredencialGoogleDaAgenda(agendaId);
+            const resposta = await removerCredencialGoogleDaAgenda(agendaId, companyId);
             toast.success(resposta?.message || 'Credencial do Google removida desta agenda.');
             setConfirmarDesconexao(false);
             setMostrarSeletor(false);
@@ -180,9 +187,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
         ? 'Consultando…'
         : fonte === 'agenda'
             ? 'Credencial da agenda'
-            : fonte === 'empresa'
-                ? 'Credencial da empresa'
-                : 'Sem Google';
+            : 'Sem Google';
 
     const semOAuthNoServidor = Boolean(status && !status.oauth_configured);
     const podeConectar = Boolean(status && status.oauth_configured);
@@ -198,7 +203,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                     <div className="min-w-0">
                         <h3 className="text-sm font-semibold">Google Calendar desta agenda</h3>
                         <p className={`mt-1 text-xs leading-relaxed ${mutedClass}`}>
-                            Cada agenda pode usar a conta Google do próprio profissional. Sem isso, ela usa a conta da clínica.
+                            Esta agenda usa somente a conta Google autorizada para o profissional correspondente.
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                             <span className={agentivePillClass(isDark, fonte === 'agenda')}>
@@ -237,9 +242,9 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                 ) : status ? (
                     <>
                         {semOAuthNoServidor && (
-                            <AgentiveAlert variant="warning" title="OAuth do Google não está configurado no servidor">
-                                Sem <strong>GOOGLE_OAUTH_CLIENT_ID</strong> e <strong>GOOGLE_OAUTH_CLIENT_SECRET</strong> no backend
-                                nenhuma agenda consegue autorizar uma conta Google. Peça ao administrador para configurar antes de tentar conectar.
+                            <AgentiveAlert variant="warning" title="OAuth do Google ainda não foi configurado">
+                                Enquanto o Client ID e o Client Secret do Google não forem informados, nenhuma agenda consegue autorizar
+                                uma conta. O Admin da plataforma cadastra esses dados no painel &ldquo;Credenciais do aplicativo Google&rdquo; no topo desta tela.
                             </AgentiveAlert>
                         )}
 
@@ -251,18 +256,9 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                             </AgentiveAlert>
                         )}
 
-                        {fonte === 'empresa' && (
-                            <AgentiveAlert variant="info" title="Esta agenda usa a conta Google da clínica">
-                                Nenhum profissional autorizou o Google para esta agenda: ela herda a credencial da empresa
-                                {status.google_account_email ? <> (<strong>{status.google_account_email}</strong>)</> : null}. Os eventos
-                                desta agenda entram no calendário da clínica. Conecte o Google desta agenda para usar a conta do profissional.
-                            </AgentiveAlert>
-                        )}
-
                         {fonte === null && (
                             <AgentiveAlert variant="warning" title="Nenhum Google conectado para esta agenda">
-                                Não há credencial própria da agenda nem credencial da empresa. Enquanto for assim, o agente não cria
-                                eventos no Google para os atendimentos deste profissional.
+                                Conecte a conta Google do profissional para criar eventos e consultar a disponibilidade desta agenda.
                             </AgentiveAlert>
                         )}
 
@@ -283,14 +279,14 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                         </dl>
 
                         <div className="flex flex-wrap items-center gap-2">
-                            {podeConectar && (
+                            {podeGerenciar && podeConectar && (
                                 <button type="button" onClick={conectar} disabled={salvando} className={agentivePrimaryButtonClass('px-4')}>
                                     {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
                                     {fonte === 'agenda' ? 'Autorizar outra conta Google desta agenda' : 'Conectar o Google desta agenda'}
                                 </button>
                             )}
 
-                            {status.google_connected && (
+                            {podeGerenciar && status.google_connected && (
                                 <button
                                     type="button"
                                     onClick={() => (mostrarSeletor ? setMostrarSeletor(false) : carregarCalendarios())}
@@ -302,7 +298,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                                 </button>
                             )}
 
-                            {fonte === 'agenda' && (
+                            {podeGerenciar && fonte === 'agenda' && (
                                 <button
                                     type="button"
                                     onClick={() => setConfirmarDesconexao(true)}
@@ -314,8 +310,8 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                                 </button>
                             )}
 
-                            {fonte !== 'agenda' && semOAuthNoServidor && (
-                                <span className={`text-xs ${mutedClass}`}>Conectar fica indisponível enquanto o OAuth do servidor não existir.</span>
+                            {podeGerenciar && fonte !== 'agenda' && semOAuthNoServidor && (
+                                <span className={`text-xs ${mutedClass}`}>Conectar fica indisponível até o Admin da plataforma cadastrar as credenciais do Google.</span>
                             )}
                         </div>
 
@@ -330,10 +326,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                                     <h4 className="text-sm font-semibold">Escolha o calendário desta agenda</h4>
                                 </div>
                                 <p className={`mt-1 text-xs leading-relaxed ${mutedClass}`}>
-                                    {fonte === 'agenda'
-                                        ? 'A lista vem da conta Google autorizada por esta agenda.'
-                                        : 'A lista vem da conta Google da clínica, porque esta agenda ainda não tem credencial própria.'}
-                                    {' '}Só aparecem calendários em que a conta é dona — escrever em calendário de terceiros seria recusado.
+                                    A lista vem da conta Google autorizada por esta agenda. Só aparecem calendários em que a conta é dona.
                                 </p>
 
                                 {carregandoCalendarios ? (
@@ -405,8 +398,7 @@ export const AgendaGoogleCalendarCard: React.FC<AgendaGoogleCalendarCardProps> =
                 message={
                     <>
                         A agenda <strong>{agendaNome || status?.agenda_nome || 'desta profissional'}</strong> deixa de ter a conta Google
-                        própria{status?.google_account_email ? ` (${status.google_account_email})` : ''}. Ela volta a usar a credencial da
-                        empresa, se houver. Eventos já criados no Google não são apagados.
+                        autorizada{status?.google_account_email ? ` (${status.google_account_email})` : ''}. Eventos já criados no Google não são apagados.
                     </>
                 }
                 onClose={() => setConfirmarDesconexao(false)}

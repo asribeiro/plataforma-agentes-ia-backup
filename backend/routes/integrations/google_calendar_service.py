@@ -6,6 +6,7 @@ import time
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional, Dict, Any, List, Sequence  # List/Sequence: freebusy e convite
 
 # --- Bibliotecas Google API Client (Importação Direta) ---
@@ -478,6 +479,76 @@ def get_google_calendar_timezone(calendar_id: str, service: Optional[Resource] =
          return None
 
 
+def list_calendar_events(
+    calendar_id: str,
+    time_min_iso: str,
+    time_max_iso: str,
+    *,
+    service: Optional[Resource] = None,
+    time_zone: Optional[str] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    """Eventos do calendario no periodo, ja normalizados.
+
+    Evento de dia inteiro vira intervalo [00:00, 00:00 do dia seguinte] no fuso
+    informado. Cancelados e os marcados como "disponivel" (transparent) ficam de
+    fora: nao ocupam horario. Retorna None se a consulta falhou.
+    """
+    service = _resolve_calendar_service(service)
+    if not service:
+        return None
+
+    try:
+        tz = ZoneInfo(time_zone) if time_zone else timezone.utc
+    except Exception:  # noqa: BLE001 - fuso invalido cai para UTC
+        tz = timezone.utc
+
+    eventos: List[Dict[str, Any]] = []
+    page_token = None
+    try:
+        while True:
+            resposta = service.events().list(
+                calendarId=calendar_id,
+                timeMin=time_min_iso,
+                timeMax=time_max_iso,
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=250,
+                pageToken=page_token,
+            ).execute()
+            for item in resposta.get("items", []):
+                if item.get("status") == "cancelled" or item.get("transparency") == "transparent":
+                    continue
+                inicio, fim = item.get("start") or {}, item.get("end") or {}
+                if inicio.get("dateTime") and fim.get("dateTime"):
+                    ini_iso, fim_iso, dia_inteiro = inicio["dateTime"], fim["dateTime"], False
+                elif inicio.get("date") and fim.get("date"):
+                    ini_dt = datetime.fromisoformat(inicio["date"]).replace(tzinfo=tz)
+                    fim_dt = datetime.fromisoformat(fim["date"]).replace(tzinfo=tz)
+                    ini_iso, fim_iso, dia_inteiro = ini_dt.isoformat(), fim_dt.isoformat(), True
+                else:
+                    continue
+                eventos.append({
+                    "id": item.get("id"),
+                    "summary": item.get("summary") or "Ocupado",
+                    "start": ini_iso,
+                    "end": fim_iso,
+                    "all_day": dia_inteiro,
+                })
+            page_token = resposta.get("nextPageToken")
+            if not page_token:
+                break
+    except HttpError as erro:
+        logger.error(
+            "events.list falhou em '%s': %s - %s", calendar_id,
+            getattr(erro, "status_code", "?"), getattr(erro, "reason", "?"),
+        )
+        return None
+    except Exception as erro:  # noqa: BLE001
+        logger.exception("events.list indisponivel em '%s': %s", calendar_id, erro)
+        return None
+    return eventos
+
+
 def get_busy_intervals(
     calendar_id: str,
     time_min_iso: str,
@@ -512,15 +583,15 @@ def get_busy_intervals(
 
     try:
         resposta = service.freebusy().query(body=corpo).execute()
-    except HttpError as erro:
-        logger.error(
-            "freebusy falhou em '%s': %s - %s", calendar_id,
-            getattr(erro, "status_code", "?"), getattr(erro, "reason", "?"),
-        )
-        return None
     except Exception as erro:  # noqa: BLE001 - falha externa e declarada, nao silenciosa
-        logger.exception("freebusy indisponivel em '%s': %s", calendar_id, erro)
-        return None
+        # O token OAuth por agenda pode nao ter escopo de freebusy: tenta os eventos.
+        logger.warning("freebusy indisponivel em '%s' (%s): tentando events.list", calendar_id, erro)
+        eventos = list_calendar_events(
+            calendar_id, time_min_iso, time_max_iso, service=service, time_zone=time_zone
+        )
+        if eventos is None:
+            return None
+        return [{"start": e["start"], "end": e["end"]} for e in eventos]
 
     calendarios = (resposta or {}).get("calendars") or {}
     dados = calendarios.get(calendar_id) or {}

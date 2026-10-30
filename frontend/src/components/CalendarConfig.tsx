@@ -44,6 +44,7 @@ import {
 } from './AgentiveUI.tsx';
 import { AgendaGoogleCalendarCard } from './AgendaGoogleCalendarCard.tsx';
 import type { GoogleAgendaFonteCredencial, GoogleAgendaStatus } from '../services/googleAgendaApi.ts';
+import { usePapelClinico } from '../hooks/usePapelClinico.ts';
 
 /**
  * Agenda POR PROFISSIONAL (F1-11).
@@ -304,6 +305,7 @@ const validarFormulario = (form: FormState): string | null => {
 
 export const CalendarConfig: React.FC = () => {
     const { isDark } = useTheme();
+    const { eu: euClinica } = usePapelClinico();
     const [, setSearchParams] = useSearchParams();
 
     // --- retorno do OAuth POR AGENDA (?google_oauth=success&agenda_id=N)
@@ -365,10 +367,23 @@ export const CalendarConfig: React.FC = () => {
         () => profissionais.find((p) => p.id === profissionalSelecionado) ?? null,
         [profissionais, profissionalSelecionado]
     );
+    const papelEhProfissional = euClinica?.role === 'clinical_professional' || euClinica?.role === 'service_professional';
+    const profissionaisVisiveis = papelEhProfissional
+        ? profissionais.filter((p) => p.id === euClinica?.professional_id)
+        : profissionais;
 
     const isGoogleConnected = Boolean(google?.google_oauth_connected);
     const linkAgendaHasGoogleLink = Boolean(linkAgenda?.google_calendar_id);
     const linkedGoogleCalendarLabel = linkAgenda?.google_calendar_summary || linkAgenda?.google_calendar_id || '';
+    const agendaGoogleEhGerenciavel = Boolean(
+        agenda && (
+            euClinica?.role === 'clinic_admin'
+            || (
+                papelEhProfissional
+                && euClinica?.professional_id === agenda.professional_id
+            )
+        )
+    );
 
     // -----------------------------------------------------------------------
     // Carga
@@ -392,6 +407,9 @@ export const CalendarConfig: React.FC = () => {
             const lista = await profissionaisApi.listar(false);
             setProfissionais(lista);
             setProfissionalSelecionado((atual) => {
+                if (papelEhProfissional && euClinica?.professional_id && lista.some((p) => p.id === euClinica.professional_id)) {
+                    return euClinica.professional_id;
+                }
                 if (atual && lista.some((p) => p.id === atual)) return atual;
                 return lista[0]?.id ?? null;
             });
@@ -401,7 +419,7 @@ export const CalendarConfig: React.FC = () => {
         } finally {
             setCarregandoProfissionais(false);
         }
-    }, [carregarMapaDeAgendas]);
+    }, [carregarMapaDeAgendas, euClinica?.professional_id, papelEhProfissional]);
 
     useEffect(() => {
         carregarProfissionais();
@@ -817,7 +835,7 @@ export const CalendarConfig: React.FC = () => {
         );
     }
 
-    if (profissionais.length === 0) {
+    if (profissionaisVisiveis.length === 0) {
         return (
             <div className={agentivePanelClass(isDark, 'p-4')}>
                 <AgentiveEmptyState
@@ -869,7 +887,7 @@ export const CalendarConfig: React.FC = () => {
                 )}
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                    {profissionais.map((profissional) => {
+                    {profissionaisVisiveis.map((profissional) => {
                         const selecionado = profissional.id === profissionalSelecionado;
                         const ativa = (agendasPorProfissional[profissional.id] ?? []).some((item) => item.active);
                         return (
@@ -1237,51 +1255,34 @@ export const CalendarConfig: React.FC = () => {
 
                                 <p className={`mt-3 text-xs leading-relaxed ${mutedClass}`}>
                                     Estes campos são preenchidos pelo backend quando a agenda é ligada a um calendário Google.
-                                    Quem autorizou a conta Google — o profissional ou a clínica — é o que o card
-                                    {' '}<strong>Google Calendar desta agenda</strong>, logo abaixo, mostra e edita.
+                                    A conta Google exclusiva desta agenda é gerenciada no cartão
+                                    {' '}<strong>Google Calendar desta agenda</strong>, logo abaixo.
                                 </p>
 
-                                {agenda && fonteGoogleDaAgenda !== 'agenda' && (
-                                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                                        {agenda.google_calendar_id ? (
-                                            <button type="button" onClick={() => setAgendaToUnlink(agenda)} disabled={salvando} className={agentiveSecondaryButtonClass(isDark, 'py-1.5 text-xs')}>
-                                                <Unlink className="h-3.5 w-3.5" />
-                                                Desvincular agenda Google
-                                            </button>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => openLinkModal(agenda)}
-                                                disabled={salvando}
-                                                className={agentiveSecondaryButtonClass(isDark, 'py-1.5 text-xs')}
-                                                title={isGoogleConnected ? 'Vincular a uma agenda Google da conta conectada' : 'Conecte o Google na aba Integrações primeiro'}
-                                            >
-                                                <Link2 className="h-3.5 w-3.5" />
-                                                Vincular agenda Google
-                                            </button>
-                                        )}
-                                        {!isGoogleConnected && (
-                                            <span className={`text-xs ${mutedClass}`}>Google Agenda não conectado — aba Integrações.</span>
-                                        )}
-                                    </div>
-                                )}
                                 {agenda && fonteGoogleDaAgenda === 'agenda' && (
                                     <p className={`mt-3 text-xs leading-relaxed ${mutedClass}`}>
                                         Esta agenda tem conta Google própria: o vínculo com o calendário é escolhido no card abaixo, na conta
-                                        do profissional — a lista da conta da clínica não vale para ela.
+                                        Google autorizada especificamente para este profissional.
                                     </p>
                                 )}
                             </div>
 
                             {/* Google Calendar da AGENDA (OAuth por profissional) */}
                             {agenda ? (
-                                <AgendaGoogleCalendarCard
-                                    agendaId={agenda.id}
-                                    agendaNome={agenda.name}
-                                    onAlterado={recarregarAgendaDoCardGoogle}
-                                    onStatusCarregado={aoCarregarStatusGoogle}
-                                    recemConectado={googleRecemConectado && oauthAgendaId === agenda.id}
-                                />
+                                agendaGoogleEhGerenciavel ? (
+                                    <AgendaGoogleCalendarCard
+                                        agendaId={agenda.id}
+                                        agendaNome={agenda.name}
+                                        onAlterado={recarregarAgendaDoCardGoogle}
+                                        onStatusCarregado={aoCarregarStatusGoogle}
+                                        recemConectado={googleRecemConectado && oauthAgendaId === agenda.id}
+                                        podeGerenciar
+                                    />
+                                ) : (
+                                    <div className={`mt-6 rounded-2xl border border-dashed p-4 text-xs leading-relaxed ${cardBorderClass} ${mutedClass}`}>
+                                        A conexão Google desta agenda só pode ser gerenciada pelo Admin Clínica ou pelo profissional vinculado.
+                                    </div>
+                                )
                             ) : (
                                 <div className={`mt-6 rounded-2xl border border-dashed p-4 text-xs leading-relaxed ${cardBorderClass} ${mutedClass}`}>
                                     O Google desta agenda aparece depois que ela existir: crie a agenda acima e volte aqui para autorizar a conta
