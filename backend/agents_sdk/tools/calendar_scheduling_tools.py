@@ -1059,6 +1059,92 @@ def _slot_inside_windows(
     return any(start_minutes >= start and end_minutes <= end for start, end in windows)
 
 
+def _google_busy_intervals(
+    *,
+    db: Session,
+    agenda: Agenda,
+    inicio: datetime,
+    fim: datetime,
+) -> Optional[List[tuple]]:
+    """Intervalos OCUPADOS na agenda do Google, em datetime com fuso.
+
+    Por que existe: a agenda do profissional pode ter compromisso que nao nasceu aqui
+    (reuniao marcada no Gmail, evento de dia inteiro). Sem ler o Google, o agente oferece
+    horario ocupado e reserva em cima — foi o que aconteceu em 04/11/2026 as 14:00.
+
+    Devolve None quando NAO conseguiu verificar (sem credencial, erro de API). None nao e
+    "esta livre": quem chama decide (mantemos a oferta e registramos o aviso).
+    """
+    if not getattr(agenda, "google_oauth_token", None):
+        return []
+
+    from backend.routes.integrations.google_calendar_service import get_busy_intervals
+    from backend.services.google_credencial import build_service_da_agenda
+
+    servico, motivo = build_service_da_agenda(db, agenda.company_id, agenda)
+    if servico is None:
+        logger.warning(
+            "[Slots] credencial Google da agenda %s nao subiu (%s): oferecendo so o banco",
+            agenda.id, motivo,
+        )
+        return None
+
+    tz = _safe_timezone(agenda.timezone)
+    intervalos = get_busy_intervals(
+        agenda.google_calendar_id or "primary",
+        inicio.isoformat(),
+        fim.isoformat(),
+        service=servico,
+        time_zone=agenda.timezone,
+    )
+    if intervalos is None:
+        logger.warning("[Slots] nao consegui ler ocupacao do Google para agenda %s", agenda.id)
+        return None
+
+    janelas: List[tuple] = []
+    for intervalo in intervalos:
+        ini = _parse_momento_google(intervalo.get("start"), tz)
+        fim_i = _parse_momento_google(intervalo.get("end"), tz)
+        if ini and fim_i and fim_i > ini:
+            janelas.append((ini, fim_i))
+    return janelas
+
+
+def _parse_momento_google(valor: Any, tz) -> Optional[datetime]:
+    """Converte o que o Google devolve em datetime com fuso.
+
+    Evento de dia inteiro vem como data pura ("2026-11-04") e ocupa o dia todo — tratar
+    como 00:00 do dia evita oferecer horario num dia em que a pessoa esta em evento.
+    """
+    texto = str(valor or "").strip()
+    if not texto:
+        return None
+    if len(texto) == 10:
+        try:
+            dia = date.fromisoformat(texto)
+        except ValueError:
+            return None
+        return datetime.combine(dia, time(0, 0), tzinfo=tz)
+    try:
+        momento = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=tz)
+    return momento.astimezone(tz)
+
+
+def _bloqueado_no_google(
+    janelas: Optional[List[tuple]],
+    inicio: datetime,
+    fim: datetime,
+) -> bool:
+    for ini_bloqueio, fim_bloqueio in janelas or []:
+        if inicio < fim_bloqueio and fim > ini_bloqueio:
+            return True
+    return False
+
+
 def _has_conflict(
     *,
     db: Session,
@@ -1142,6 +1228,29 @@ def _validate_slot_availability(
             "message_for_agent": "Esse horário acabou de ficar indisponível. Consulte novos horários antes de responder.",
         }
 
+    # Ultima barreira: a agenda do Google pode ter compromisso que o banco nao conhece
+    # (reuniao marcada no Gmail, evento de dia inteiro). Reservar em cima disso e o erro
+    # que o cliente ve como "horario que nao existe".
+    janelas_google = _google_busy_intervals(
+        db=db,
+        agenda=agenda,
+        inicio=starts_at - timedelta(minutes=1),
+        fim=ends_at + timedelta(minutes=1),
+    )
+    if _bloqueado_no_google(janelas_google, starts_at, ends_at):
+        logger.info(
+            "[Slots] reserva recusada: %s ja esta ocupado no Google (agenda %s)",
+            starts_at.isoformat(), agenda.id,
+        )
+        return {
+            "success": False,
+            "error": "slot_unavailable",
+            "message_for_agent": (
+                "Esse horário já está ocupado na agenda do profissional. Consulte os "
+                "horários disponíveis e ofereça outras opções antes de responder."
+            ),
+        }
+
     return {"success": True}
 
 
@@ -1159,6 +1268,14 @@ def _build_available_slots(
     schedules = {schedule.day_of_week: schedule for schedule in agenda.schedules}
     slots: List[Dict[str, Any]] = []
     duration = agenda.slot_duration or 30
+
+    # Ocupacao vinda do Google para a faixa inteira: uma consulta so, nao uma por dia.
+    janelas_google = _google_busy_intervals(
+        db=db,
+        agenda=agenda,
+        inicio=datetime.combine(start_date, time(0, 0), tzinfo=tz),
+        fim=datetime.combine(end_date + timedelta(days=1), time(0, 0), tzinfo=tz),
+    )
 
     current_day = start_date
     while current_day <= end_date and len(slots) < limit:
@@ -1178,11 +1295,15 @@ def _build_available_slots(
                         datetime.strptime(_minutes_to_time(slot_start_minutes), "%H:%M").time(),
                     ).replace(tzinfo=tz)
                     slot_end = slot_start + timedelta(minutes=duration)
-                    if slot_start >= earliest and not _has_conflict(
-                        db=db,
-                        agenda=agenda,
-                        starts_at=slot_start,
-                        ends_at=slot_end,
+                    if (
+                        slot_start >= earliest
+                        and not _bloqueado_no_google(janelas_google, slot_start, slot_end)
+                        and not _has_conflict(
+                            db=db,
+                            agenda=agenda,
+                            starts_at=slot_start,
+                            ends_at=slot_end,
+                        )
                     ):
                         slots.append(
                             {
