@@ -7,6 +7,7 @@ behavior across Google Calendar, Clinicorp, and Webhook integrations.
 """
 
 import logging
+import re
 from typing import Annotated, Optional
 from pydantic import Field
 from sqlalchemy.orm import Session
