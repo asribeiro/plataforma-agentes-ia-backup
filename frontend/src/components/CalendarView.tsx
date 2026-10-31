@@ -193,8 +193,18 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                     end_date: endDate.toISOString()
                 }
             });
-            console.log("[CalendarView] Appointments Response:", response.data);
-            setAgendamentos(response.data);
+            const todos: Agendamento[] = Array.isArray(response.data) ? response.data : [];
+            // Agendamento cancelado NÃO ocupa a grade: o evento dele já foi removido da agenda
+            // do profissional e o histórico continua no CRM com o selo CANCELADO. Sem este
+            // filtro, o horário cancelado aparece como se estivesse de pé.
+            const ativos = todos.filter(
+                (item) => !String(item.status ?? "").toUpperCase().startsWith("CANCEL"),
+            );
+            console.log(
+                `[CalendarView] Appointments: ${ativos.length} ativos de ${todos.length} ` +
+                `(${todos.length - ativos.length} cancelado(s) fora da grade)`,
+            );
+            setAgendamentos(ativos);
         } catch (error) {
             console.error("[CalendarView] Failed to fetch appointments", error);
         }
