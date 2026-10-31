@@ -186,168 +186,189 @@ def reschedule_appointment(
     company_id: Annotated[int, Field(description="ID da empresa")],
     phone: Annotated[str, Field(description="Telefone do cliente (formato: 5500000000009)")],
     customer_name: Annotated[str, Field(description="Nome completo do cliente")],
-    new_date: Annotated[str, Field(description="Nova data no formato DD/MM/YYYY")],
+    new_date: Annotated[str, Field(description="Nova data no formato DD/MM/AAAA. Pode ser anterior à data atual do agendamento.")],
     new_time: Annotated[str, Field(description="Novo horário no formato HH:MM")],
     treatment_type: Annotated[str, Field(description="Tipo de tratamento")] = "Consulta de Avaliação",
-    customer_type: Annotated[str, Field(description="Tipo de cliente: 'novo' ou 'retorno'")] = "novo"
+    customer_type: Annotated[str, Field(description="Tipo de cliente: 'novo' ou 'retorno'")] = "novo",
+    current_date: Annotated[str, Field(description="Data do agendamento que será movido (DD/MM/AAAA). Informe quando o cliente tiver mais de um agendamento ativo.")] = "",
 ) -> str:
     """
-    Reagenda consulta existente para nova data/horário.
+    Move um agendamento existente para outra data e horário.
 
-    Fluxo automático integrado:
-    1. Cancela agendamento atual (Google Calendar/Clinicorp/Local)
-    2. Valida disponibilidade do novo horário
-    3. Cria novo agendamento na data/hora especificada
-    4. Sincroniza com integração ativa (Google/Clinicorp/Webhook)
-    5. Envia nova confirmação ao cliente
+    Use quando o cliente pedir para remarcar. A nova data pode ser ANTES da
+    data atual — não existe exigência de ser depois. Confirme a nova data e o
+    novo horário com o cliente antes de chamar.
 
-    Args:
-        company_id: ID numérico da empresa
-        phone: Telefone no formato brasileiro completo
-        customer_name: Nome completo do cliente
-        new_date: Nova data no formato brasileiro DD/MM/YYYY
-        new_time: Novo horário no formato 24h HH:MM
-        treatment_type: Tipo de tratamento (padrão: "Consulta de Avaliação")
-        customer_type: "novo" para primeira consulta, "retorno" para clientes existentes
-
-    Returns:
-        Mensagem de confirmação do reagendamento com novos detalhes
-
-    Example:
-        >>> result = reschedule_appointment(
-        ...     company_id=42,
-        ...     phone="5500000000009",
-        ...     customer_name="João Silva",
-        ...     new_date="15/09/2025",
-        ...     new_time="14:30",
-        ...     treatment_type="Limpeza",
-        ...     customer_type="retorno"
-        ... )
-        >>> print(result)
-        "João Silva, seu reagendamento está confirmado! Nova data: 15/09/2025 às 14:30..."
+    Antes de chamar, consulte os horários disponíveis (`find_available_lead_slots`)
+    e ofereça até 3 opções. Esta tool valida o horário, move o evento na agenda do
+    profissional e recria as tarefas de lembrete (2 dias e 1 dia antes, às 09:00).
+    Se o horário não estiver livre, ela devolve opções próximas no mesmo dia.
     """
+    from datetime import datetime, time as _time, timedelta
 
-    logger.info(f"[RescheduleTool] Processing reschedule for {phone} at company {company_id} to {new_date} {new_time}")
+    from backend.agents_sdk.tools.calendar_scheduling_tools import (
+        _build_available_slots,
+        _cancelar_tarefas_de_lembrete,
+        _criar_tarefas_de_lembrete,
+        _normalize_phone,
+        _ordenar_por_horario_preferido,
+        _parse_hhmm,
+        _safe_timezone,
+        _validate_slot_availability,
+    )
+    from backend.db import get_db
+    from backend.models import Agenda, Agendamento
+    from backend.services.google_credencial import build_service_da_agenda
 
+    def _data(texto: str):
+        limpo = str(texto or "").strip().replace("-", "/")
+        for formato in ("%d/%m/%Y", "%d/%m/%y"):
+            try:
+                return datetime.strptime(limpo, formato).date()
+            except ValueError:
+                continue
+        return None
+
+    db = next(get_db())
     try:
-        # Import required services
-        from backend.prompt.db_integration.agendamento_logic import processar_json_do_llm
-        from backend.prompt.llm.slot_verification import verify_slot_availability
-        from backend.db import get_db
-
-        # Get database session
-        db = next(get_db())
-
-        # Step 0: Check if new date is after current appointment
-        try:
-            from sqlalchemy.sql import text
-            from datetime import datetime
-
-            result = db.execute(text("""
-                SELECT consulta_data
-                FROM agendamentos
-                WHERE phone = :phone AND company_id = :company_id
-                AND status NOT LIKE 'CANCELLED%'
-                ORDER BY id DESC
-                LIMIT 1
-            """), {"phone": phone, "company_id": company_id})
-
-            row = result.fetchone()
-            if row and row.consulta_data:
-                current_appointment_date = row.consulta_data.date()
-                new_appointment_date = datetime.strptime(new_date, "%d/%m/%Y").date()
-
-                if new_appointment_date <= current_appointment_date:
-                    return (
-                        f"A nova data ({new_date}) deve ser posterior à sua consulta atual "
-                        f"({current_appointment_date.strftime('%d/%m/%Y')}). "
-                        "Por favor, escolha uma data futura."
-                    )
-
-                logger.info(f"[RescheduleTool] Date validation OK: {new_date} > {current_appointment_date}")
-        except Exception as e:
-            logger.warning(f"[RescheduleTool] Could not validate appointment date: {e}")
-
-        # Step 1: Validate new slot availability
-        try:
-            slot_available = verify_slot_availability(
-                db=db,
-                company_id=company_id,
-                requested_date=new_date,
-                requested_time=new_time
+        telefone = _normalize_phone(phone) or phone
+        candidatos = (
+            db.query(Agendamento)
+            .filter(
+                Agendamento.company_id == company_id,
+                Agendamento.phone == telefone,
+                ~Agendamento.status.ilike("CANCEL%"),
+            )
+            .order_by(Agendamento.consulta_data)
+            .all()
+        )
+        if not candidatos:
+            return (
+                "Nao encontrei agendamento ativo para esse telefone. Nao diga ao cliente que "
+                "remarcou: confirme a data do agendamento atual."
             )
 
-            if not slot_available:
-                return (
-                    f"O horário {new_date} às {new_time} não está disponível. "
-                    "Por favor, escolha outro horário."
-                )
-        except Exception as e:
-            logger.warning(f"[RescheduleTool] Could not verify slot availability: {e}")
-            # Continue with reschedule attempt - slot verification is optional
+        alvo = candidatos[0]
+        dia_atual = _data(current_date)
+        if dia_atual is not None:
+            do_dia = [
+                item
+                for item in candidatos
+                if item.consulta_data
+                and item.consulta_data.date() == dia_atual
+            ]
+            if do_dia:
+                alvo = do_dia[0]
 
-        # Step 2: Process reschedule as cancellation + new appointment
-        # The existing logic in processar_json_do_llm already handles this pattern
-        # by cancelling old appointments before creating new ones
+        agenda = (
+            db.query(Agenda).filter(Agenda.id == alvo.agenda_id).first()
+            if alvo.agenda_id
+            else db.query(Agenda).filter(Agenda.company_id == company_id, Agenda.active.is_(True)).first()
+        )
+        if agenda is None:
+            return "Nao consegui identificar a agenda desse agendamento. Escale para a equipe."
 
-        # Create LLM JSON format for confirmation (reschedule)
-        llm_json = {
-            "agendamento_confirmado": True,
-            "cancelar_agendamento": False,
-            "nome": customer_name,
-            "data": new_date,
-            "horario": new_time,
-            "tratamento": treatment_type,
-            "cliente": customer_type,
-            "is_reschedule": True  # Flag to indicate this is a reschedule operation
-        }
+        tz = _safe_timezone(agenda.timezone)
+        nova_data = _data(new_date)
+        minutos = _parse_hhmm(new_time)
+        if nova_data is None or minutos is None:
+            return (
+                f"Nao entendi a data/hora do reagendamento ({new_date} {new_time}). "
+                "Use DD/MM/AAAA e HH:MM."
+            )
 
-        # Get API key for webhook integration
-        api_key = None
-        try:
-            from sqlalchemy.sql import text
-            row_client_data = db.execute(text("""
-                SELECT c.api_key
-                FROM clients c
-                JOIN client_companies cc ON cc.client_id = c.id
-                WHERE cc.company_id = :cid LIMIT 1
-            """), {"cid": company_id}).fetchone()
-            if row_client_data and hasattr(row_client_data, 'api_key'):
-                api_key = row_client_data.api_key
-        except Exception as e:
-            logger.error(f"Error fetching api_key for company_id {company_id}: {e}")
+        duracao = agenda.slot_duration or 30
+        novo_inicio = datetime.combine(
+            nova_data, _time(hour=minutos // 60, minute=minutos % 60), tzinfo=tz
+        )
+        novo_fim = novo_inicio + timedelta(minutes=duracao)
 
-        # Process reschedule using existing confirmation logic
-        # The router will automatically cancel old appointment before creating new one
-        result = processar_json_do_llm(
+        # Sem comparar com a data antiga: qualquer data futura e valida.
+        validacao = _validate_slot_availability(
+            db=db,
+            agenda=agenda,
+            starts_at=novo_inicio,
+            ends_at=novo_fim,
+            exclude_appointment_id=alvo.id,
+        )
+        if not validacao.get("success"):
+            alternativas = _ordenar_por_horario_preferido(
+                _build_available_slots(
+                    db=db,
+                    agenda=agenda,
+                    start_date=nova_data,
+                    end_date=nova_data + timedelta(days=7),
+                    preferred_period="",
+                    limit=30,
+                ),
+                new_time,
+            )[:3]
+            lista = " | ".join(item.get("display", "") for item in alternativas)
+            return (
+                f"{validacao.get('message_for_agent', 'Horario indisponivel.')} "
+                + (f"Opcoes proximas: {lista}. Ofereca essas opcoes ao cliente." if alternativas else "")
+            )
+
+        # Move o evento na agenda do profissional (mesmo event_id)
+        google_status = "sem evento no Google"
+        if alvo.event_id:
+            servico, motivo = build_service_da_agenda(db, company_id, agenda)
+            if servico is None:
+                google_status = f"evento nao movido (credencial indisponivel: {motivo})"
+            else:
+                try:
+                    servico.events().patch(
+                        calendarId=alvo.google_calendar_id or agenda.google_calendar_id,
+                        eventId=alvo.event_id,
+                        body={
+                            "start": {"dateTime": novo_inicio.isoformat(), "timeZone": agenda.timezone},
+                            "end": {"dateTime": novo_fim.isoformat(), "timeZone": agenda.timezone},
+                        },
+                    ).execute()
+                    google_status = "evento movido na agenda"
+                except Exception as exc:  # noqa: BLE001
+                    google_status = f"falha ao mover evento ({type(exc).__name__})"
+                    logger.error("[RescheduleTool] falha ao mover evento: %s", exc)
+
+        # Lembretes antigos morrem; os novos nascem para a data nova
+        antigos = _cancelar_tarefas_de_lembrete(db, company_id, alvo.id)
+
+        alvo.consulta_data = novo_inicio
+        alvo.status = "SCHEDULED"
+        db.commit()
+        db.refresh(alvo)
+
+        novos = _criar_tarefas_de_lembrete(
             db=db,
             company_id=company_id,
-            phone=phone,
-            llm_json=llm_json,
-            api_key=api_key
+            appointment=alvo,
+            agenda=agenda,
+            starts_at=novo_inicio,
+            sufixo=novo_inicio.strftime("%Y%m%d%H%M"),
         )
 
-        logger.info(f"[RescheduleTool] Reschedule processed successfully for {phone}")
-
-        # Enhance the confirmation message to indicate reschedule
-        if result and not result.startswith("Erro") and not result.startswith("Ocorreu"):
-            # Add reschedule context to confirmation message
-            reschedule_note = "\n\n✅ Reagendamento realizado com sucesso!"
-            result = reschedule_note + "\n\n" + result
-
-        return result or f"Reagendamento confirmado para {new_date} às {new_time}!"
-
-    except Exception as e:
-        logger.error(f"[RescheduleTool] Error processing reschedule: {e}")
+        logger.info(
+            "[RescheduleTool] agendamento %s movido para %s | google=%s | lembretes antigos=%s novos=%s",
+            alvo.id, novo_inicio.isoformat(), google_status,
+            antigos.get("canceladas"), novos.get("criados"),
+        )
         return (
-            "Ocorreu um erro ao processar o reagendamento. "
-            "Nossa equipe foi notificada. Por favor, tente novamente ou entre em contato."
+            f"Reagendado para {novo_inicio.strftime('%d/%m/%Y as %H:%M')}. "
+            f"{google_status}. "
+            f"{antigos.get('canceladas', 0)} lembrete(s) antigo(s) cancelado(s) e "
+            f"{novos.get('criados', 0)} novo(s) criado(s)."
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[RescheduleTool] erro ao reagendar: %s", exc)
+        db.rollback()
+        return (
+            "Nao consegui reagendar agora. Nao diga ao cliente que remarcou: informe que a "
+            "equipe vai confirmar o novo horario."
         )
     finally:
-        # Ensure database session is closed
         try:
             db.close()
-        except:
+        except Exception:  # noqa: BLE001
             pass
 
 

@@ -45,6 +45,7 @@ def _criar_tarefas_de_lembrete(
     appointment: Any,
     agenda: Any,
     starts_at: datetime,
+    sufixo: str = "",
 ) -> Dict[str, Any]:
     """Cria as duas tarefas de re-confirmacao no CRM: 2 dias e 1 dia antes, as 09:00.
 
@@ -95,6 +96,8 @@ def _criar_tarefas_de_lembrete(
             (inicio_local.date() - timedelta(days=dias)), time(hour=9, minute=0), tzinfo=fuso
         )
         marcador = f"lembrete_{dias}d_agendamento_{getattr(appointment, 'id', 0)}"
+        if sufixo:
+            marcador = f"{marcador}_{sufixo}"
 
         # task_metadata e JSON (nao JSONB), entao nao existe astext: filtramos com o
         # operador ->> do Postgres. Sem isso a consulta estoura AttributeError e nenhum
@@ -212,6 +215,7 @@ def create_calendar_scheduling_tools(
         date_to: Annotated[str, Field(description="Data final em YYYY-MM-DD ou DD/MM/YYYY. Vazio usa 14 dias após a data inicial.")] = "",
         preferred_period: Annotated[str, Field(description="Período opcional: manha, tarde ou noite.")] = "",
         preferred_time: Annotated[str, Field(description="Horário desejado no formato HH:MM (ex.: 16:00). Use quando o lead citar um horário, mesmo aproximado ('perto das 16h', 'umas 4 da tarde'). A resposta vem ordenada do mais próximo para o mais distante.")] = "",
+        any_professional: Annotated[bool, Field(description="true quando o cliente NAO tem preferencia de dia nem horario: busca o profissional com a agenda livre mais proxima, em todas as agendas ativas. false quando ele tem preferencia ou quando ja se sabe a agenda.")] = False,
         limit: Annotated[int, Field(description="Quantidade máxima de horários para retornar.", ge=1, le=30)] = 12,
     ) -> Dict[str, Any]:
         """
@@ -227,6 +231,10 @@ def create_calendar_scheduling_tools(
         "16:30"), preencha `preferred_time` com HH:MM: a lista volta ordenada do
         horário mais próximo para o mais distante. Não repita a mesma lista de
         horários depois que o lead pedir outro horário ou outro período.
+
+        Se o lead NÃO tiver preferência de dia nem de horário, chame com
+        `any_professional=true`: a tool devolve os horários livres mais próximos
+        somando todas as agendas ativas e diz o profissional de cada um.
         """
 
         _ = context
@@ -234,6 +242,27 @@ def create_calendar_scheduling_tools(
 
         db = next(get_db())
         try:
+            if any_professional:
+                inicio = _parse_date(date_from, datetime.now(_safe_timezone(DEFAULT_TIMEZONE)).date())
+                fim = _parse_date(date_to, inicio + timedelta(days=14))
+                if fim < inicio:
+                    return {
+                        "success": False,
+                        "error": "date_range_invalid",
+                        "message_for_agent": "A data final precisa ser igual ou posterior a data inicial.",
+                    }
+                fim = min(fim, inicio + timedelta(days=31))
+                return _slots_em_todas_as_agendas(
+                    db=db,
+                    company_id=company_id,
+                    start_date=inicio,
+                    end_date=fim,
+                    preferred_period=preferred_period,
+                    preferred_time=preferred_time,
+                    limit=limit,
+                    suggestion_limit=suggestion_limit,
+                )
+
             agenda_result = _resolve_agenda(
                 db=db,
                 company_id=company_id,
@@ -1310,6 +1339,76 @@ def _ordenar_por_horario_preferido(
         return (momento.date(), abs(minutos - alvo))
 
     return sorted(slots, key=chave)
+
+
+def _slots_em_todas_as_agendas(
+    *,
+    db: Session,
+    company_id: int,
+    start_date: date,
+    end_date: date,
+    preferred_period: str,
+    preferred_time: str,
+    limit: int,
+    suggestion_limit: int,
+) -> Dict[str, Any]:
+    """Horarios livres somando TODAS as agendas ativas (qualquer profissional).
+
+    Usado quando o cliente nao tem preferencia de dia nem horario: o produto pede "o profissional
+    com a agenda livre mais proxima". Cada slot diz de qual profissional ele e, para o agente
+    poder responder "quinta as 09:00 com o Flavio" em vez de so "quinta as 09:00".
+    """
+    agendas = (
+        db.query(Agenda)
+        .filter(Agenda.company_id == company_id, Agenda.active.is_(True))
+        .order_by(Agenda.id)
+        .all()
+    )
+    if not agendas:
+        return {
+            "success": False,
+            "error": "no_active_agenda",
+            "message_for_agent": "Nao ha agenda ativa para consultar. Escale para a equipe.",
+        }
+
+    agregado: List[Dict[str, Any]] = []
+    for agenda_item in agendas:
+        parciais = _build_available_slots(
+            db=db,
+            agenda=agenda_item,
+            start_date=start_date,
+            end_date=end_date,
+            preferred_period=preferred_period,
+            limit=max(limit, 30),
+        )
+        for slot in _ordenar_por_horario_preferido(parciais, preferred_time):
+            item = dict(slot)
+            item["profissional"] = agenda_item.name
+            item["agenda_id"] = agenda_item.id
+            agregado.append(item)
+
+    agregado.sort(key=lambda slot: (str(slot.get("start_time")), slot.get("agenda_id") or 0))
+    slots = agregado[:limit]
+
+    return {
+        "success": True,
+        "any_professional": True,
+        "agendas_consultadas": [
+            {"id": agenda_item.id, "name": agenda_item.name} for agenda_item in agendas
+        ],
+        "date_from": start_date.isoformat(),
+        "date_to": end_date.isoformat(),
+        "preferred_time": preferred_time or None,
+        "max_suggestions": suggestion_limit,
+        "requested_range_has_slots": bool(slots),
+        "slots": slots,
+        "message_for_agent": (
+            f"Ofereca no maximo {suggestion_limit} destas opcoes, dizendo o dia, a hora e o "
+            "profissional de cada uma. Sao as agendas livres mais proximas."
+            if slots
+            else "Nao ha horario livre nesse periodo em nenhum profissional; ofereca consultar outro periodo."
+        ),
+    }
 
 
 def _build_available_slots(
