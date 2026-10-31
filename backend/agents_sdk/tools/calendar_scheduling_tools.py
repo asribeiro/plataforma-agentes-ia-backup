@@ -123,10 +123,23 @@ def _criar_tarefas_de_lembrete(
             f"Reconfirmar consulta em {dias} dia{'s' if dias > 1 else ''} "
             f"({inicio_local.strftime('%d/%m/%Y %H:%M')})"
         )
+        # Texto que o PACIENTE recebe. Sem `message_content` o pipeline de mensagem agendada
+        # não tem o que enviar (era o defeito: o lembrete só existia como cartão no CRM).
+        primeiro_nome = (getattr(contato, "name", None) or "paciente").strip().split(" ")[0]
+        nome_agenda = getattr(agenda, "name", None) or "nossa clínica"
+        texto_paciente = (
+            f"Olá, {primeiro_nome}! Aqui é da {nome_agenda}. "
+            f"Passando para confirmar sua consulta em "
+            f"{inicio_local.strftime('%d/%m/%Y')} às {inicio_local.strftime('%H:%M')}. "
+            f"Você confirma? Se precisar remarcar, me avise que eu vejo os horários disponíveis."
+        )
+
         tarefa = ContactTask(
             contact_id=contato.id,
             company_id=company_id,
             task_type="message",
+            message_content=texto_paciente,
+            message_type="text",
             title=titulo[:255],
             description=(
                 f"Enviar mensagem ao paciente pedindo a re-confirmacao da consulta marcada "

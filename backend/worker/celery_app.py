@@ -64,6 +64,7 @@ app.conf.update(
         'backend.worker.tasks_reminders',  # NOVO: para lembretes de tarefas
         'backend.worker.tasks_reminder_check',  # NOVO: verificação de lembretes
         'backend.worker.tasks_scheduled_messages',  # NOVO: para mensagens agendadas
+        'backend.worker.tasks_appointment_reminders',  # lembrete de consulta ao paciente
         'backend.worker.tasks_agent_dynamic_followup',  # NOVO: follow-up dinamico do Agent Builder
         'backend.worker.tasks_nutrition_campaign',  # NOVO: para campanhas de nutrição
         # 'backend.agents_sdk.tasks.celery_tasks',  # NOVO: para Agents SDK Database (DESABILITADO TEMPORARIAMENTE: Erro de import SQLiteSession)
@@ -223,6 +224,18 @@ app.conf.beat_schedule = {
         'options': {
             'queue': 'reminders_queue',
             'priority': 5,
+        }
+    },
+
+    # Lembrete de consulta ENVIADO AO PACIENTE a cada 5 minutos.
+    # Sem filtro de dia útil/feriado de propósito: o paciente não pode esquecer a consulta
+    # (decisão do dono do produto). O horário do disparo vem do `scheduled_for` (09:00 local).
+    'enviar-lembretes-de-consulta-a-cada-5min': {
+        'task': 'backend.worker.tasks_appointment_reminders.enviar_lembretes_vencidos',
+        'schedule': 300,
+        'options': {
+            'queue': 'reminders_queue',
+            'priority': 4,
         }
     },
 
