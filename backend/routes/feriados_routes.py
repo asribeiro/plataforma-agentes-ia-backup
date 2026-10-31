@@ -22,8 +22,12 @@ from backend.auth import get_current_user
 from backend.db import get_db
 from backend.models import Feriado, Professional
 from backend.routes.admin_platform_routes import require_internal_admin
+from backend.routes.company import is_internal_admin
 from backend.services import feriados as servico
-from backend.services.papel_clinico import exigir_admin_de_usuarios
+from backend.services.papel_clinico import (
+    PAPEIS_QUE_ADMINISTRAM_USUARIOS,
+    exigir_admin_de_usuarios,
+)
 
 logger = logging.getLogger("saas_business.feriados_routes")
 
@@ -73,9 +77,13 @@ def listar_feriados(
             .all()
         ]
 
+    papel = getattr(usuario, "role", None)
     return {
         "ano": ano,
         "company_id": empresa_id,
+        # a tela usa isto para mostrar/ativar controles; quem manda continua sendo o guard da rota
+        "admin_plataforma": bool(is_internal_admin(usuario)),
+        "pode_configurar": papel in PAPEIS_QUE_ADMINISTRAM_USUARIOS,
         "profissionais": profissionais,
         "feriados": [
             {

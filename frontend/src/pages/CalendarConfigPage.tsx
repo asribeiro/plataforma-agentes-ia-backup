@@ -1,12 +1,13 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Calendar as CalendarIcon, Clock, Link2 } from 'lucide-react';
+import { Calendar as CalendarIcon, CalendarOff, Clock, Link2 } from 'lucide-react';
 import { CalendarConfig } from '../components/CalendarConfig.tsx';
 import GoogleAgendaProfissionais from './GoogleAgendaProfissionais.tsx';
+import FeriadosAgenda from './FeriadosAgenda.tsx';
 import { CalendarView } from '../components/CalendarView.tsx';
 import { useTheme } from '../contexts/ThemeContext.tsx';
 
-type AgendaTab = 'calendar' | 'hours' | 'integrations';
+type AgendaTab = 'calendar' | 'hours' | 'integrations' | 'feriados';
 
 const tabs: Array<{
     id: AgendaTab;
@@ -17,10 +18,11 @@ const tabs: Array<{
     { id: 'calendar', label: 'Calendário', description: 'Dia e semana', icon: CalendarIcon },
     { id: 'hours', label: 'Agendas por profissional', description: 'Turnos, duração e fuso', icon: Clock },
     { id: 'integrations', label: 'Integrações', description: 'Google por profissional', icon: Link2 },
+    { id: 'feriados', label: 'Feriados', description: 'Quem trabalha no feriado', icon: CalendarOff },
 ];
 
 const normalizeTab = (tab: string | null): AgendaTab => {
-    if (tab === 'hours' || tab === 'integrations') return tab;
+    if (tab === 'hours' || tab === 'integrations' || tab === 'feriados') return tab;
     return 'calendar';
 };
 
@@ -67,7 +69,7 @@ const CalendarConfigPage: React.FC = () => {
                             </p>
                         </div>
 
-                        <div className={`grid w-full grid-cols-3 gap-1 rounded-2xl border p-1.5 xl:w-[520px] ${isDark ? 'border-white/10 bg-black/15' : 'border-brand/10 bg-brand-canvas'}`}>
+                        <div className={`grid w-full grid-cols-4 gap-1 rounded-2xl border p-1.5 xl:w-[640px] ${isDark ? 'border-white/10 bg-black/15' : 'border-brand/10 bg-brand-canvas'}`}>
                             {tabs.map((tab) => {
                                 const Icon = tab.icon;
                                 const isActive = activeTab === tab.id;
@@ -119,6 +121,7 @@ const CalendarConfigPage: React.FC = () => {
                     {activeTab === 'calendar' && <CalendarView />}
                     {activeTab === 'hours' && <CalendarConfig />}
                     {activeTab === 'integrations' && <GoogleAgendaProfissionais embedded />}
+                    {activeTab === 'feriados' && <FeriadosAgenda />}
                 </div>
             </div>
         </div>
