@@ -1240,6 +1240,17 @@ def _validate_slot_availability(
             "message_for_agent": "Esse horário já passou ou não respeita a margem de segurança da agenda.",
         }
 
+    if _dia_bloqueado_por_feriado(db=db, agenda=agenda, dia=local_start.date()):
+        return {
+            "success": False,
+            "error": "holiday",
+            "message_for_agent": (
+                "Esse dia é feriado e a agenda está fechada. Ofereça outra data; se o "
+                "profissional tiver sido liberado pelo admin da clínica, o horário aparece "
+                "normalmente na consulta."
+            ),
+        }
+
     schedule = next(
         (item for item in agenda.schedules if item.day_of_week == local_start.weekday()),
         None,
@@ -1339,6 +1350,21 @@ def _ordenar_por_horario_preferido(
         return (momento.date(), abs(minutos - alvo))
 
     return sorted(slots, key=chave)
+
+
+def _dia_bloqueado_por_feriado(*, db: Session, agenda: Agenda, dia: date) -> bool:
+    """True quando o dia é feriado e este profissional NAO foi liberado pela clínica."""
+    try:
+        from backend.services import feriados as servico_feriados
+
+        bloqueio = servico_feriados.feriado_bloqueia(
+            db, dia, getattr(agenda, "professional_id", None)
+        )
+        return bloqueio is not None
+    except Exception as exc:  # noqa: BLE001
+        # Feriado indisponivel nao pode derrubar a consulta de horarios.
+        logger.warning("[Feriados] nao consegui avaliar %s: %s", dia, exc)
+        return False
 
 
 def _slots_em_todas_as_agendas(
@@ -1458,6 +1484,11 @@ def _build_available_slots(
 
     current_day = start_date
     while current_day <= end_date and len(slots) < limit:
+        # Feriado fecha o dia para todas as clínicas; exceção libera profissional por
+        # profissional (ver backend/services/feriados.py).
+        if _dia_bloqueado_por_feriado(db=db, agenda=agenda, dia=current_day):
+            current_day += timedelta(days=1)
+            continue
         schedule = schedules.get(current_day.weekday())
         windows = _schedule_windows(schedule)
         for start_window, end_window in windows:

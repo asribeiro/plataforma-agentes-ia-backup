@@ -1,4 +1,6 @@
 from backend.routes import services_routes
+from backend.routes import feriados_routes as feriados_routes_router
+
 from backend.routes import professionals_routes
 from backend.routes import company_flag_routes
 from backend.routes.company_registration_routes import router as company_registration_router
@@ -475,6 +477,8 @@ app.include_router(referral_campaigns_router, prefix="/api", tags=["Referral Cam
 # Rotas públicas (com autenticação por API Key)
 app.include_router(company_setup_router, prefix="/api/public/setup", tags=["Public Setup"])
 app.include_router(password_reset_router, prefix="/auth", tags=["password-reset"])
+app.include_router(feriados_routes_router.router, tags=["Feriados"])
+
 
 @app.on_event("startup")
 async def startup_event():

@@ -2530,3 +2530,53 @@ class Fatura(Base):
         Index("ix_faturas_company_competencia", "company_id", "competencia"),
         Index("ix_faturas_status", "status"),
     )
+
+class Feriado(Base):
+    """Dia bloqueado para TODAS as agendas de TODAS as clínicas (decisão de 31/10/2026).
+
+    A exceção por profissional vive em `FeriadoExcecao`: existindo a linha, aquele profissional
+    trabalha naquele feriado. Sem linha, o dia está fechado para ele.
+    """
+
+    __tablename__ = "feriados"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    data = Column(Date, nullable=False, index=True)
+    nome = Column(String(120), nullable=False)
+    tipo = Column(String(20), nullable=False, server_default=text("'nacional'"))
+    uf = Column(String(2), nullable=True)
+    cidade = Column(String(120), nullable=True)
+    recorrente = Column(Boolean, nullable=False, server_default=text("false"))
+    origem = Column(String(20), nullable=False, server_default=text("'manual'"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("data", "nome", name="uq_feriados_data_nome"),
+        CheckConstraint(
+            "tipo IN ('nacional', 'estadual', 'municipal', 'pontual')",
+            name="ck_feriados_tipo",
+        ),
+    )
+
+
+class FeriadoExcecao(Base):
+    """Profissional liberado para trabalhar num feriado, dentro de uma clínica."""
+
+    __tablename__ = "feriado_excecoes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    feriado_id = Column(
+        Integer, ForeignKey("feriados.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    company_id = Column(
+        BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    professional_id = Column(
+        Integer, ForeignKey("professionals.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_by = Column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("feriado_id", "professional_id", name="uq_feriado_excecao_profissional"),
+    )

@@ -174,11 +174,29 @@ class SlotsService:
             # 3. Schedules Map
             schedules_map = {s.day_of_week: s for s in agenda.schedules}
 
+            def _bloqueado_por_feriado(dia) -> bool:
+                """Feriado fecha o dia; excecao por profissional libera (services/feriados.py)."""
+                try:
+                    from backend.services import feriados as servico_feriados
+
+                    return (
+                        servico_feriados.feriado_bloqueia(
+                            db, dia, getattr(agenda, "professional_id", None)
+                        )
+                        is not None
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("[Feriados] falha ao avaliar %s: %s", dia, exc)
+                    return False
+
             # 4. Generate Theoretical Slots
             generated_slots = []
             current_day = start_date
 
             while current_day <= end_date:
+                if _bloqueado_por_feriado(current_day):
+                    current_day += timedelta(days=1)
+                    continue
                 weekday = current_day.weekday()
                 if weekday in schedules_map:
                     sched = schedules_map[weekday]
