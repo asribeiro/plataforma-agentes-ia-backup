@@ -211,6 +211,7 @@ def create_calendar_scheduling_tools(
         date_from: Annotated[str, Field(description="Data inicial em YYYY-MM-DD ou DD/MM/YYYY. Vazio usa hoje.")] = "",
         date_to: Annotated[str, Field(description="Data final em YYYY-MM-DD ou DD/MM/YYYY. Vazio usa 14 dias após a data inicial.")] = "",
         preferred_period: Annotated[str, Field(description="Período opcional: manha, tarde ou noite.")] = "",
+        preferred_time: Annotated[str, Field(description="Horário desejado no formato HH:MM (ex.: 16:00). Use quando o lead citar um horário, mesmo aproximado ('perto das 16h', 'umas 4 da tarde'). A resposta vem ordenada do mais próximo para o mais distante.")] = "",
         limit: Annotated[int, Field(description="Quantidade máxima de horários para retornar.", ge=1, le=30)] = 12,
     ) -> Dict[str, Any]:
         """
@@ -219,8 +220,13 @@ def create_calendar_scheduling_tools(
         Use quando o lead pedir disponibilidade, perguntar "qual tem?",
         sugerir data/horário ou antes de criar um agendamento. A resposta
         retorna horários reais da agenda, respeitando janelas de atendimento,
-        margem de segurança e conflitos. Nunca diga que não há horários sem
-        consultar esta ferramenta.
+        margem de segurança, compromissos do Google e conflitos. Nunca diga que
+        não há horários sem consultar esta ferramenta.
+
+        Quando o lead citar um horário ("perto das 16h", "umas 4 da tarde",
+        "16:30"), preencha `preferred_time` com HH:MM: a lista volta ordenada do
+        horário mais próximo para o mais distante. Não repita a mesma lista de
+        horários depois que o lead pedir outro horário ou outro período.
         """
 
         _ = context
@@ -249,14 +255,20 @@ def create_calendar_scheduling_tools(
                 }
 
             end_date = min(end_date, start_date + timedelta(days=31))
+            # Com horário desejado, busca a faixa inteira: cortar em `limit` antes
+            # de ordenar devolveria só 13:00/13:30/14:00 quando o lead pediu 16h.
+            limite_interno = max(limit, 30) if _parse_hhmm(preferred_time) is not None else limit
             slots = _build_available_slots(
                 db=db,
                 agenda=agenda,
                 start_date=start_date,
                 end_date=end_date,
                 preferred_period=preferred_period,
-                limit=limit,
+                limit=limite_interno,
             )
+            slots = _ordenar_por_horario_preferido(slots, preferred_time)
+            if len(slots) > limit:
+                slots = slots[:limit]
             next_available_slots = []
             if not slots:
                 next_available_slots = _build_available_slots(
@@ -282,6 +294,7 @@ def create_calendar_scheduling_tools(
                 "current_weekday": now.strftime("%A"),
                 "earliest_bookable_time": earliest_bookable.isoformat(),
                 "max_suggestions": suggestion_limit,
+                "preferred_time": preferred_time or None,
                 "requested_range_has_slots": bool(slots),
                 "slots": slots,
                 "next_available_slots": next_available_slots,
@@ -1252,6 +1265,51 @@ def _validate_slot_availability(
         }
 
     return {"success": True}
+
+
+def _parse_hhmm(valor: str) -> Optional[int]:
+    """Extrai o horario de frases humanas: "16:00", "16h", "as 16:30", "4 da tarde".
+
+    O modelo pode repassar exatamente o texto do paciente, entao aceitar apenas HH:MM
+    fazia a ordenacao por proximidade nao acontecer justamente no caso mais comum.
+    """
+    texto = str(valor or "").strip().lower()
+    if not texto:
+        return None
+
+    achado = re.search(r"(\d{1,2})\s*(?:[:h]\s*(\d{2}))?", texto)
+    if not achado:
+        return None
+    hora = int(achado.group(1))
+    minuto = int(achado.group(2) or 0)
+    if ("tarde" in texto or "noite" in texto) and hora < 12:
+        hora += 12
+    if not (0 <= hora <= 23 and 0 <= minuto <= 59):
+        return None
+    return hora * 60 + minuto
+
+
+def _ordenar_por_horario_preferido(
+    slots: List[Dict[str, Any]],
+    preferred_time: str,
+) -> List[Dict[str, Any]]:
+    """Ordena os horarios pela distancia ao horario pedido, mantendo a ordem dos dias.
+
+    Sem horario pedido devolve a lista como veio (ordem cronologica).
+    """
+    alvo = _parse_hhmm(preferred_time)
+    if alvo is None or not slots:
+        return slots
+
+    def chave(slot: Dict[str, Any]):
+        try:
+            momento = datetime.fromisoformat(str(slot.get("start_time")))
+        except (TypeError, ValueError):
+            return (datetime.max.date(), 10 ** 6)
+        minutos = momento.hour * 60 + momento.minute
+        return (momento.date(), abs(minutos - alvo))
+
+    return sorted(slots, key=chave)
 
 
 def _build_available_slots(
