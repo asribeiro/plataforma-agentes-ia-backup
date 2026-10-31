@@ -1358,10 +1358,14 @@ def _slots_em_todas_as_agendas(
     com a agenda livre mais proxima". Cada slot diz de qual profissional ele e, para o agente
     poder responder "quinta as 09:00 com o Flavio" em vez de so "quinta as 09:00".
     """
+    # `Agenda` so existe nas anotacoes (from __future__ import annotations): importar aqui
+    # dentro, senao da NameError no primeiro uso real.
+    from backend.models import Agenda as AgendaModel
+
     agendas = (
-        db.query(Agenda)
-        .filter(Agenda.company_id == company_id, Agenda.active.is_(True))
-        .order_by(Agenda.id)
+        db.query(AgendaModel)
+        .filter(AgendaModel.company_id == company_id, AgendaModel.active.is_(True))
+        .order_by(AgendaModel.id)
         .all()
     )
     if not agendas:
@@ -1387,7 +1391,25 @@ def _slots_em_todas_as_agendas(
             item["agenda_id"] = agenda_item.id
             agregado.append(item)
 
-    agregado.sort(key=lambda slot: (str(slot.get("start_time")), slot.get("agenda_id") or 0))
+    # Sem horário preferido: ordem cronológica. Com horário preferido: dia mais próximo
+    # primeiro, e dentro do dia os horários mais próximos do que ele pediu — senão o
+    # "perto das 16h" volta como 08:00 só porque é mais cedo.
+    alvo_minutos = _parse_hhmm(preferred_time)
+
+    def _chave(slot: Dict[str, Any]):
+        try:
+            momento = datetime.fromisoformat(str(slot.get("start_time")))
+        except (TypeError, ValueError):
+            return (datetime.max.date(), 10 ** 6, 10 ** 6)
+        if alvo_minutos is None:
+            return (momento.date(), momento.hour * 60 + momento.minute, slot.get("agenda_id") or 0)
+        return (
+            momento.date(),
+            abs(momento.hour * 60 + momento.minute - alvo_minutos),
+            slot.get("agenda_id") or 0,
+        )
+
+    agregado.sort(key=_chave)
     slots = agregado[:limit]
 
     return {
