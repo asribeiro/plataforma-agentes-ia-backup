@@ -19,6 +19,7 @@ interface Agendamento {
     midia?: string;
     interesse?: string;
     status: string;
+    confirmed_at?: string | null;
 }
 
 interface CalendarViewProps { }
@@ -456,6 +457,11 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                                 <div className="h-full border-l-4 border-white/40 p-2">
                                                     <div className="truncate font-semibold">{appointment.nome}</div>
                                                     <div className="truncate text-white/65">{appointment.phone}</div>
+                                                    {appointment.confirmed_at && (
+                                                        <div className="mt-1 inline-flex items-center rounded-full bg-emerald-400/25 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-100">
+                                                            confirmado
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}

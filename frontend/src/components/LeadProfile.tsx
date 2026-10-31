@@ -938,7 +938,11 @@ function LeadAppointmentsCard({
       ) : (
         <div className="crm-appointments-list">
           {appointments.map((appointment) => {
-            const normalizedStatus = (appointment.status || 'SCHEDULED').toUpperCase();
+            // Confirmado pelo paciente vence o status cru: o agendamento continua SCHEDULED
+            // (o worker depende disso), mas para quem atende ele esta CONFIRMADO.
+            const normalizedStatus = (
+              appointment.confirmed_at ? 'CONFIRMED' : (appointment.status || 'SCHEDULED')
+            ).toUpperCase();
             const isNoShow = normalizedStatus === 'NO_SHOW';
             const isCanceled = ['CANCELED', 'CANCELLED', 'CANCELADO'].includes(normalizedStatus);
             const agendaName = appointment.agenda_id ? agendaById.get(Number(appointment.agenda_id)) : null;
@@ -954,9 +958,15 @@ function LeadAppointmentsCard({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate text-sm font-semibold">{dateLabel}</p>
-                      <span className={appointmentStatusClass(isDark, appointment.status)}>
-                        {appointmentStatusLabel(appointment.status)}
+                      <span className={appointmentStatusClass(isDark, normalizedStatus)}>
+                        {appointmentStatusLabel(normalizedStatus)}
                       </span>
+                      {appointment.confirmed_at && (
+                        <span className={crmModernBadgeClass(isDark)}>
+                          <CheckCircle2 className="h-3 w-3" />
+                          confirmado em {formatDate(appointment.confirmed_at)}
+                        </span>
+                      )}
                     </div>
                     <div className={cx('mt-2 flex flex-wrap items-center gap-2 text-xs', mutedTextClass)}>
                       <span className={crmModernBadgeClass(isDark)}>

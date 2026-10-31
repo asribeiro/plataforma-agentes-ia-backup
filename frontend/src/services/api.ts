@@ -743,6 +743,9 @@ export interface AgendamentoResponse {
   // Novos campos para os status de sincronização
   google_sync_status?: string; // SYNCED, FAILED, CANCELLED, CANCEL_FAILED, NOT_APPLICABLE
   clinicorp_sync_status?: string; // SYNCED, FAILED, CANCELLED, CANCEL_FAILED, NOT_APPLICABLE
+  // Confirmacao do paciente (resposta ao lembrete): preenchido = ele confirmou.
+  confirmed_at?: string | null;
+  confirmed_via?: string | null;
 }
 
 // Constantes para os estados de sincronização do Google Calendar
