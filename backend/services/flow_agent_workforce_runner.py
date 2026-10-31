@@ -2376,6 +2376,24 @@ def _prepare_workforce_agent_configs(
             _calendar_scheduling_factory,
         )
 
+        from backend.agents_sdk.tools.appointment_management_tools import (
+            APPOINTMENT_MANAGEMENT_TOOLS,
+        )
+
+        def _appointment_management_factory(_tool_config: Any) -> List[Any]:
+            """Cancelar/remarcar consulta: sem isso o agente nao consegue liberar a agenda."""
+            from backend.agents_sdk.manager import _bind_tool_to_company
+
+            return [
+                _bind_tool_to_company(tool, int(company_id))
+                for tool in APPOINTMENT_MANAGEMENT_TOOLS
+            ]
+
+        registry.register_tool_factory(
+            "calendar.appointment_management",
+            _appointment_management_factory,
+        )
+
         def _human_handoff_factory(tool_config: Any) -> List[Any]:
             settings = getattr(tool_config, "settings", None)
             if not isinstance(settings, dict):
