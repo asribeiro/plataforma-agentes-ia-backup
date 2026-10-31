@@ -794,6 +794,14 @@ class Agendamento(Base):
         index=True,
         comment="Status da sincronização com Google Calendar"
     )
+    # Confirmacao do paciente (o "sim" respondido ao lembrete). Sem estas colunas o agente nao
+    # tinha onde registrar a confirmacao e tentava criar o agendamento de novo.
+    confirmed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    confirmed_via = Column(
+        String(20),
+        nullable=True,
+        comment="Canal pelo qual o paciente confirmou (whatsapp, telefone, presencial)",
+    )
     # --------------------------------------
 
     __table_args__ = (

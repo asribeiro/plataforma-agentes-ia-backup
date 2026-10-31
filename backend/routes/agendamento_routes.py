@@ -152,6 +152,8 @@ class AgendamentoResponse(BaseModel):
     status: Optional[str]
     clinicorp_sync_status: Optional[str]
     google_sync_status: Optional[str]
+    confirmed_at: Optional[datetime] = None
+    confirmed_via: Optional[str] = None
     agenda_id: Optional[int]
     consulta_timezone: Optional[str] = None
     consulta_data_local: Optional[str] = None

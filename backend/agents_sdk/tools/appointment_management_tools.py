@@ -518,8 +518,135 @@ def suggest_reschedule_before_cancel(
 
 # Tool registration for OpenAI Agents SDK
 # This will be imported and used by the business assistant agent
+
+@function_tool(strict_mode=False)
+def confirm_lead_appointment(
+    company_id: Annotated[int, Field(description="ID da empresa")],
+    phone: Annotated[str, Field(description="Telefone do paciente (formato: 5500000000009)")],
+    appointment_date: Annotated[str, Field(description="Data do agendamento que ele confirmou, DD/MM/AAAA ou AAAA-MM-DD. Opcional quando ele só tem um agendamento.")] = "",
+    appointment_time: Annotated[str, Field(description="Horario confirmado, HH:MM. Opcional.")] = "",
+) -> str:
+    """
+    REGISTRA A CONFIRMACAO do paciente para um agendamento que JA EXISTE.
+
+    Use quando o paciente responder ao lembrete dizendo que vai comparecer: "sim", "confirmo",
+    "ok", "estarei la", "pode confirmar". Nesse caso NUNCA use `create_lead_appointment` — o
+    horario ja e dele, tentar reservar de novo devolve "horario indisponivel" e confunde o
+    paciente.
+
+    Marca `confirmed_at` no agendamento, cancela os lembretes que sobraram e devolve o resumo para
+    voce responder com o que ele precisa saber (data, hora, profissional, endereco). Se ele quiser
+    remarcar, use `suggest_reschedule_before_cancel`/`reschedule_appointment`; se quiser cancelar,
+    `confirm_cancellation`.
+    """
+    import re
+    from datetime import datetime
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    from backend.db import get_db
+    from backend.models import Agendamento, Agenda
+
+    from .calendar_scheduling_tools import _cancelar_tarefas_de_lembrete, _normalize_phone
+
+    db = next(get_db())
+    try:
+        telefone = _normalize_phone(phone) or phone
+        candidatos = (
+            db.query(Agendamento)
+            .filter(
+                Agendamento.company_id == company_id,
+                Agendamento.phone == telefone,
+                ~Agendamento.status.ilike("CANCEL%"),
+            )
+            .order_by(Agendamento.consulta_data)
+            .all()
+        )
+        if not candidatos:
+            return (
+                "Nao encontrei agendamento ativo para esse telefone. Nao diga que confirmou: "
+                "confirme com o paciente a data e o horario."
+            )
+
+        def _fuso(alvo):
+            try:
+                agenda = db.query(Agenda).filter(Agenda.id == alvo.agenda_id).first()
+                return ZoneInfo((agenda.timezone if agenda else None) or "America/Sao_Paulo")
+            except (ZoneInfoNotFoundError, ValueError):
+                return ZoneInfo("America/Sao_Paulo")
+
+        escolhido = candidatos[0]
+        dia_pedido = None
+        texto_data = str(appointment_date or "").strip()
+        if texto_data:
+            normalizado = texto_data.replace("/", "-")
+            for formato in ("%d-%m-%Y", "%Y-%m-%d"):
+                try:
+                    dia_pedido = datetime.strptime(normalizado, formato).date()
+                    break
+                except ValueError:
+                    continue
+            if dia_pedido is not None:
+                do_dia = [
+                    item for item in candidatos
+                    if item.consulta_data
+                    and item.consulta_data.astimezone(_fuso(item)).date() == dia_pedido
+                ]
+                if not do_dia:
+                    return (
+                        f"Nao encontrei agendamento ativo em {texto_data}. Nao diga que confirmou: "
+                        "confirme a data com o paciente."
+                    )
+                escolhido = do_dia[0]
+                texto_hora = str(appointment_time or "").strip().replace("h", ":")
+                achado = re.search(r"(\d{1,2})\s*:?\s*(\d{2})?", texto_hora)
+                if achado:
+                    hora = int(achado.group(1))
+                    minuto = int(achado.group(2) or 0)
+                    escolhido = min(
+                        do_dia,
+                        key=lambda item: abs(
+                            (
+                                item.consulta_data.astimezone(_fuso(item)).hour * 60
+                                + item.consulta_data.astimezone(_fuso(item)).minute
+                            )
+                            - (hora * 60 + minuto)
+                        ),
+                    )
+
+        if escolhido.status and escolhido.status.upper().startswith("CANCEL"):
+            return "Esse agendamento esta cancelado; nao ha o que confirmar."
+
+        fuso = _fuso(escolhido)
+        quando_local = (
+            escolhido.consulta_data.astimezone(fuso) if escolhido.consulta_data else None
+        )
+
+        ja_confirmado = escolhido.confirmed_at is not None
+        escolhido.confirmed_at = datetime.now(fuso)
+        escolhido.confirmed_via = "whatsapp"
+        db.commit()
+
+        lembretes = _cancelar_tarefas_de_lembrete(db, company_id, escolhido.id)
+
+        agenda = db.query(Agenda).filter(Agenda.id == escolhido.agenda_id).first()
+        nome_agenda = getattr(agenda, "name", None) or "a clinica"
+        quando_texto = (
+            quando_local.strftime("%d/%m/%Y as %H:%M") if quando_local else "a data combinada"
+        )
+        prefixo = "Confirmacao registrada novamente" if ja_confirmado else "Presenca confirmada"
+        return (
+            f"{prefixo}: {quando_texto} ({nome_agenda}). "
+            f"Lembretes pendentes cancelados: {lembretes}. "
+            "Nao crie agendamento novo. Agradeca, repita data/hora/profissional e entregue o "
+            "endereco e as instrucoes de preparo em UMA mensagem."
+        )
+    finally:
+        db.close()
+
+
 APPOINTMENT_MANAGEMENT_TOOLS = [
     suggest_reschedule_before_cancel,
     confirm_cancellation,
+    confirm_lead_appointment,
     reschedule_appointment
 ]

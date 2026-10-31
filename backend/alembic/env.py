@@ -1,3 +1,4 @@
+import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
@@ -42,6 +43,12 @@ target_metadata = [Base.metadata, AgentsSDKBase.metadata]
 def get_url():
     # DATABASE_URL é obrigatória fora do modo development e nunca deve conter
     # credenciais versionadas no alembic.ini.
+    #
+    # ALEMBIC_DATABASE_URL existe para dry-run em banco descartável. Antes deste override o
+    # `DATABASE_URL` do backend.config sempre vencia e o "dry-run" rodava no banco de PRODUÇÃO.
+    override = os.environ.get("ALEMBIC_DATABASE_URL")
+    if override:
+        return override
     return DATABASE_URL or config.get_main_option("sqlalchemy.url")
 
 
