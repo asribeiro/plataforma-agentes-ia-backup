@@ -296,7 +296,20 @@ def enviar_mensagem_agendada(task_id: int):
                 # Salvar mensagem no histórico
                 try:
                     # Extrair ID do WAHA
-                    waha_msg_id = waha_response.get('id') or waha_response.get('messageId') if waha_response else f"waha_{uuid.uuid4()}"
+                    # O WAHA devolve `id` como dicionário; a coluna é string. Sem normalizar,
+                    # o INSERT estoura com "can't adapt type 'dict'" e a tarefa fica presa em
+                    # in_progress mesmo com a mensagem já entregue.
+                    waha_id_bruto = None
+                    if waha_response:
+                        waha_id_bruto = waha_response.get('id') or waha_response.get('messageId')
+                    if isinstance(waha_id_bruto, dict):
+                        waha_msg_id = (
+                            waha_id_bruto.get('_serialized')
+                            or waha_id_bruto.get('id')
+                            or json.dumps(waha_id_bruto, ensure_ascii=False)
+                        )
+                    else:
+                        waha_msg_id = waha_id_bruto or f"waha_{uuid.uuid4()}"
 
                     # Salvar no banco de mensagens
                     new_message = Message(
@@ -311,9 +324,12 @@ def enviar_mensagem_agendada(task_id: int):
                         timestamp=datetime.utcnow(),
                         zapi_message_id=waha_msg_id # Usando coluna zapi_message_id para guardar ID do WAHA
                     )
-                    db.add(new_message)
+                    # SAVEPOINT: histórico quebrado não pode impedir o lembrete de ser
+                    # marcado como enviado (a mensagem já saiu de verdade).
+                    with db.begin_nested():
+                        db.add(new_message)
                 except Exception as msg_error:
-                        logger.error(f"[SCHED_MSG] Erro ao salvar mensagem no histórico: {msg_error}")
+                    logger.error(f"[SCHED_MSG] Erro ao salvar mensagem no histórico: {msg_error}")
 
                 db.commit()
                 logger.info(f"[SCHED_MSG] Task {task_id} finalizada com SUCESSO via WAHA")
