@@ -13,6 +13,7 @@ import json
 import os
 from backend.db import get_db
 from backend.auth import verify_client_or_bearer_api_key
+from backend.services.feriados import feriado_bloqueia
 from backend.models import Agendamento, Agenda, Client, NoShowEvent, Lead, CalendarIntegration
 from backend.worker.tasks_confirmation import enviar_passo_confirmacao
 from backend.worker.tasks_noshow import enviar_passo_noshow
@@ -41,6 +42,35 @@ logger = logging.getLogger("saas_business.agendamentos")
 
 CHATMEMORY_PATH = str(CHAT_MEMORY_DIR)
 DEFAULT_AGENDA_TIMEZONE = "America/Sao_Paulo"
+
+def _validar_feriado(db: Session, company_id: int, quando, agenda_id: Optional[int]) -> None:
+    """Barra agendamento em feriado, salvo exceção liberando aquele profissional.
+
+    Feriado é global (fecha todas as clínicas); a exceção é por profissional da agenda. Sem
+    `agenda_id` a checagem usa `professional_id=None`, ou seja: feriado sem exceção conhecida
+    bloqueia (é o comportamento seguro — quem tem exceção sempre agenda por uma agenda).
+    """
+    if quando is None:
+        return
+    professional_id = None
+    if agenda_id:
+        agenda = db.query(Agenda).filter(
+            Agenda.id == agenda_id,
+            Agenda.company_id == company_id,
+        ).first()
+        if agenda is not None:
+            professional_id = getattr(agenda, "professional_id", None)
+    feriado = feriado_bloqueia(db, quando, professional_id)
+    if feriado is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{feriado.data.strftime('%d/%m/%Y')} é feriado ({feriado.nome}) e a agenda está "
+                "bloqueada para este profissional. Libere o profissional em Configurações → "
+                "Agenda → Feriados para atender nesse dia."
+            ),
+        )
+
 
 router = APIRouter(
     prefix="/clients/{client_id}/companies/{company_id}/agendamentos",
@@ -318,6 +348,8 @@ async def criar_agendamento(
         company_id=company_id,
         agenda_id=payload.agenda_id,
     )
+    # Feriado: dia globalmente bloqueado; só passa com exceção do profissional da agenda.
+    _validar_feriado(db, company_id, consulta_data, payload.agenda_id)
     # --- Fim Validação ---
 
     # Cria o agendamento local inicial (pode ser deletado/substituído pelo sync do Clinicorp)

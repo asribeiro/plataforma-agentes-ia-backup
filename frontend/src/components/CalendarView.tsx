@@ -9,6 +9,7 @@ import { formatInTimeZone } from 'date-fns-tz';
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Lock } from 'lucide-react';
 import AppointmentBookingModal from './AppointmentBookingModal.tsx';
 import { listarEventosGoogleDaAgenda, type GoogleAgendaEvento } from '../services/googleAgendaApi.ts';
+import { feriadosApi, type Feriado } from '../services/feriadosApi.ts';
 
 interface Agendamento {
     id: number;
@@ -127,14 +128,43 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
     const [viewMode, setViewMode] = useState<'week' | 'day'>('week');
     const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
     const [eventosGoogle, setEventosGoogle] = useState<GoogleAgendaEvento[]>([]);
+    // Feriados indexados por 'AAAA-MM-DD'. Feriado é global (fecha todas as clínicas);
+    // quem trabalha no dia é exceção por profissional, dentro de `liberados`.
+    const [feriadosPorDia, setFeriadosPorDia] = useState<Record<string, Feriado>>({});
 
     // Modal states
     const [showModal, setShowModal] = useState(false);
     const [selectedSlot, setSelectedSlot] = useState<Date | null>(null);
 
+    // Carrega os feriados dos anos que a grade pode mostrar (a semana pode virar o ano).
     useEffect(() => {
-        loadAgendas();
-    }, []);
+        const anos = new Set<number>();
+        const base = viewMode === 'week' ? startOfWeek(currentDate, { weekStartsOn: 0 }) : currentDate;
+        if (viewMode === 'week') {
+            for (let i = 0; i < 7; i += 1) anos.add(addDays(base, i).getFullYear());
+        } else {
+            anos.add(base.getFullYear());
+        }
+        let cancelado = false;
+        (async () => {
+            const juntos: Record<string, Feriado> = {};
+            for (const ano of Array.from(anos)) {
+                try {
+                    const resposta = await feriadosApi.listar(ano);
+                    (resposta?.feriados || []).forEach(feriado => {
+                        juntos[feriado.data] = feriado;
+                    });
+                } catch (erro) {
+                    // Feriado é enfeite de tela, não pode derrubar a agenda.
+                    console.warn('[CalendarView] falha ao carregar feriados de', ano, erro);
+                }
+            }
+            if (!cancelado) setFeriadosPorDia(juntos);
+        })();
+        return () => {
+            cancelado = true;
+        };
+    }, [currentDate, viewMode]);
 
     useEffect(() => {
         if (selectedAgendaId) {
@@ -278,6 +308,18 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
         if (!selectedAgenda) return null;
 
         const duration = selectedAgenda.slot_duration || 30;
+        // Devolve o feriado quando o dia está BLOQUEADO para o profissional desta agenda.
+        // Feriado liberado para ele (exceção da clínica) devolve null.
+        const feriadoBloqueando = (dayKey: string): Feriado | null => {
+            const feriado = feriadosPorDia[dayKey];
+            if (!feriado) return null;
+            const profissionalId = selectedAgenda?.professional_id ?? null;
+            if (profissionalId !== null && (feriado.liberados || []).includes(profissionalId)) {
+                return null;
+            }
+            return feriado;
+        };
+
         const days = viewMode === 'week' ?
             Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(currentDate, { weekStartsOn: 0 }), i)) :
             [currentDate];
@@ -376,6 +418,23 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                         Sem agenda
                                     </span>
                                 )}
+                                {feriadosPorDia[dayKey] && (
+                                    feriadoBloqueando(dayKey) ? (
+                                        <span
+                                            className="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-full bg-rose-500 px-2 py-0.5 text-[10px] font-semibold text-white"
+                                            title={`Feriado: ${feriadosPorDia[dayKey].nome}`}
+                                        >
+                                            {`Feriado · ${feriadosPorDia[dayKey].nome}`}
+                                        </span>
+                                    ) : (
+                                        <span
+                                            className="mt-1 inline-flex max-w-full items-center gap-1 truncate rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700"
+                                            title={`Feriado com exceção: ${feriadosPorDia[dayKey].nome}`}
+                                        >
+                                            Liberado
+                                        </span>
+                                    )
+                                )}
                             </div>
                         );
                     })}
@@ -422,7 +481,9 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                     selectedAgenda.timezone,
                                     DATE_TIME_KEY_FORMAT,
                                 ) >= slotDateTimeKey;
-                                const canCreateAppointment = !appointment && !googleEvent && !isPastSlot && isConfiguredSlot;
+                                const feriadoNoSlot = feriadoBloqueando(dayKey);
+                                const canCreateAppointment = !appointment && !googleEvent && !isPastSlot
+                                    && isConfiguredSlot && !feriadoNoSlot;
 
                                 return (
                                     <div
@@ -435,9 +496,11 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                                     ? `Google Agenda: ${googleEvent.summary}`
                                                     : isPastSlot
                                                     ? 'Horário passado'
-                                                    : !isConfiguredSlot
-                                                        ? 'Fora da janela de atendimento'
-                                                        : undefined
+                                                    : feriadoNoSlot
+                                                        ? `Feriado: ${feriadoNoSlot.nome}`
+                                                        : !isConfiguredSlot
+                                                            ? 'Fora da janela de atendimento'
+                                                            : undefined
                                         }
                                         className={`relative min-w-[132px] flex-1 border-r border-brand/10 transition-colors ${
                                             appointment
@@ -446,6 +509,8 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                                     ? 'cursor-not-allowed'
                                                     : isPastSlot
                                                     ? 'cursor-not-allowed bg-[repeating-linear-gradient(135deg,rgba(17,17,17,0.035)_0,rgba(17,17,17,0.035)_8px,transparent_8px,transparent_16px)]'
+                                                    : feriadoNoSlot
+                                                    ? 'cursor-not-allowed bg-[repeating-linear-gradient(135deg,rgba(244,63,94,0.10)_0,rgba(244,63,94,0.10)_8px,transparent_8px,transparent_16px)]'
                                                     : !isConfiguredSlot
                                                         ? 'cursor-not-allowed bg-brand-canvas/35'
                                                         : 'cursor-pointer hover:bg-brand-canvas'
@@ -477,8 +542,14 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
                                                 </div>
                                             </div>
                                         )}
-                                        {isPastSlot && !appointment && !googleEvent && (
-                                            <div className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-brand/10 bg-white/80 text-brand/25">
+                                        {(isPastSlot || feriadoNoSlot) && !appointment && !googleEvent && (
+                                            <div
+                                                className={`absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full border bg-white/80 ${
+                                                    feriadoNoSlot
+                                                        ? 'border-rose-200 text-rose-400'
+                                                        : 'border-brand/10 text-brand/25'
+                                                }`}
+                                            >
                                                 <Lock className="h-3 w-3" />
                                             </div>
                                         )}
