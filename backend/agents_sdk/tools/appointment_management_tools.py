@@ -8,6 +8,7 @@ behavior across Google Calendar, Clinicorp, and Webhook integrations.
 
 import logging
 import re
+from zoneinfo import ZoneInfo
 from typing import Annotated, Optional
 from pydantic import Field
 from sqlalchemy.orm import Session
@@ -16,6 +17,84 @@ from sqlalchemy.orm import Session
 from agents import function_tool
 
 logger = logging.getLogger(__name__)
+
+
+def _cancelar_um_agendamento(db: Session, company_id: int, agendamento, motivo: str = "") -> dict:
+    """Cancela UM agendamento: marca CANCELLED, apaga o evento no Google e os lembretes.
+
+    Fonte única de verdade: `confirm_cancellation` e `cancel_lead_appointments` usam este helper, para
+    que a mensagem ao paciente e o efeito na agenda nunca divirjam.
+    """
+    from backend.agents_sdk.tools.calendar_scheduling_tools import _cancelar_tarefas_de_lembrete
+    from backend.models import Agenda
+    from backend.services.google_credencial import build_service_da_agenda
+
+    agenda = db.query(Agenda).filter(Agenda.id == agendamento.agenda_id).first()
+    resultado = {
+        "id": agendamento.id,
+        "quando": None,
+        "profissional": getattr(agenda, "profissional_nome", None) or getattr(agenda, "nome", None),
+        "agenda": getattr(agenda, "nome", None),
+        "google": "not_applicable",
+        "lembretes": 0,
+    }
+
+    if agendamento.consulta_data:
+        try:
+            fuso = ZoneInfo((agenda.timezone if agenda else None) or "America/Sao_Paulo")
+        except Exception:  # noqa: BLE001
+            fuso = ZoneInfo("America/Sao_Paulo")
+        resultado["quando"] = agendamento.consulta_data.astimezone(fuso)
+
+    agendamento.status = "CANCELLED"
+    if motivo:
+        agendamento.interesse = (agendamento.interesse or "")[:200]
+    db.commit()
+
+    if agendamento.event_id:
+        servico, motivo_falha = build_service_da_agenda(db, company_id, agenda)
+        if servico is None:
+            resultado["google"] = f"failed: credencial indisponivel ({motivo_falha})"
+            logger.warning("[Cancelamento] sem credencial Google para agenda %s", agendamento.agenda_id)
+        else:
+            try:
+                servico.events().delete(
+                    calendarId=agendamento.google_calendar_id or agenda.google_calendar_id,
+                    eventId=agendamento.event_id,
+                ).execute()
+                agendamento.event_id = None
+                agendamento.google_sync_status = "CANCELLED"
+                db.commit()
+                resultado["google"] = "deleted"
+            except Exception as exc:  # noqa: BLE001
+                resultado["google"] = f"failed: {type(exc).__name__}"
+                logger.error("[Cancelamento] falha ao apagar evento no Google: %s", exc)
+    else:
+        agendamento.google_sync_status = "CANCELLED"
+        db.commit()
+
+    lembretes = _cancelar_tarefas_de_lembrete(db, company_id, agendamento.id)
+    resultado["lembretes"] = lembretes.get("canceladas", 0)
+    logger.info(
+        "[Cancelamento] ag %s (%s) google=%s lembretes=%s",
+        agendamento.id,
+        resultado["quando"],
+        resultado["google"],
+        resultado["lembretes"],
+    )
+    return resultado
+
+
+def _descricao_agendamento(agendamento, agenda, quando) -> str:
+    partes = []
+    if quando:
+        partes.append(quando.strftime("%d/%m/%Y as %H:%M"))
+    profissional = getattr(agenda, "profissional_nome", None) or getattr(agenda, "nome", None)
+    if profissional:
+        partes.append(f"com {profissional}")
+    if getattr(agendamento, "interesse", None):
+        partes.append(f"({agendamento.interesse})")
+    return " ".join(partes) or f"agendamento {agendamento.id}"
 
 
 @function_tool(strict_mode=False)
@@ -121,40 +200,10 @@ def confirm_cancellation(
         fuso = _fuso(escolhido)
         quando_local = escolhido.consulta_data.astimezone(fuso) if escolhido.consulta_data else None
 
-        # 1) marca CANCELLED — nunca apaga a linha
-        escolhido.status = "CANCELLED"
-        if reason:
-            escolhido.interesse = (escolhido.interesse or "")[:200]
-        db.commit()
+        cancelado = _cancelar_um_agendamento(db, company_id, escolhido, reason)
+        google_status = cancelado["google"]
 
-        # 2) apaga o evento na agenda do profissional
-        google_status = "not_applicable"
-        if escolhido.event_id:
-            agenda = db.query(Agenda).filter(Agenda.id == escolhido.agenda_id).first()
-            servico, motivo = build_service_da_agenda(db, company_id, agenda)
-            if servico is None:
-                google_status = f"failed: credencial indisponivel ({motivo})"
-                logger.warning("[ConfirmCancelTool] sem credencial Google para agenda %s", escolhido.agenda_id)
-            else:
-                try:
-                    servico.events().delete(
-                        calendarId=escolhido.google_calendar_id or agenda.google_calendar_id,
-                        eventId=escolhido.event_id,
-                    ).execute()
-                    escolhido.event_id = None
-                    escolhido.google_sync_status = "CANCELLED"
-                    db.commit()
-                    google_status = "deleted"
-                except Exception as exc:  # noqa: BLE001
-                    google_status = f"failed: {type(exc).__name__}"
-                    logger.error("[ConfirmCancelTool] falha ao apagar evento no Google: %s", exc)
-        else:
-            escolhido.google_sync_status = "CANCELLED"
-            db.commit()
-
-        # 3) cancela as tarefas de lembrete
-        lembretes = _cancelar_tarefas_de_lembrete(db, company_id, escolhido.id)
-
+        lembretes = {"canceladas": cancelado["lembretes"]}
         logger.info(
             "[ConfirmCancelTool] cancelado agendamento %s (%s) google=%s lembretes=%s",
             escolhido.id, quando_local, google_status, lembretes,
@@ -644,9 +693,192 @@ def confirm_lead_appointment(
         db.close()
 
 
+
+@function_tool(strict_mode=False)
+def list_lead_appointments(
+    company_id: Annotated[int, Field(description="ID da empresa")],
+    phone: Annotated[str, Field(description="Telefone do cliente (formato: 5500000000009)")],
+    incluir_cancelados: Annotated[bool, Field(description="true para listar tambem os cancelados")] = False,
+) -> str:
+    """
+    Lista os agendamentos do cliente com data, hora, profissional e situacao.
+
+    Use SEMPRE antes de cancelar ou de falar em "todos os agendamentos": sem
+    esta lista voce nao sabe o que existe. Se a lista vier vazia, nao diga ao
+    cliente que existe agendamento.
+    """
+    from backend.agents_sdk.tools.calendar_scheduling_tools import _normalize_phone
+    from backend.db import get_db
+    from backend.models import Agenda, Agendamento
+
+    db = next(get_db())
+    try:
+        telefone = _normalize_phone(phone) or phone
+        consulta = db.query(Agendamento).filter(Agendamento.company_id == company_id)
+        if telefone:
+            consulta = consulta.filter(Agendamento.phone == telefone)
+        if not incluir_cancelados:
+            consulta = consulta.filter(~Agendamento.status.ilike("CANCEL%"))
+        registros = consulta.order_by(Agendamento.consulta_data).all()
+
+        if not registros:
+            return (
+                "Nenhum agendamento ativo para este cliente. Nao diga que existe agendamento: "
+                "confirme com ele se o agendamento foi feito em outro telefone."
+            )
+
+        linhas = []
+        for indice, item in enumerate(registros, start=1):
+            agenda = db.query(Agenda).filter(Agenda.id == item.agenda_id).first()
+            quando = None
+            if item.consulta_data:
+                try:
+                    fuso = ZoneInfo((agenda.timezone if agenda else None) or "America/Sao_Paulo")
+                except Exception:  # noqa: BLE001
+                    fuso = ZoneInfo("America/Sao_Paulo")
+                quando = item.consulta_data.astimezone(fuso)
+            linhas.append(
+                f"{indice}) {_descricao_agendamento(item, agenda, quando)} - {item.status}"
+            )
+        return (
+            f"{len(registros)} agendamento(s) encontrado(s):\n" + "\n".join(linhas) +
+            "\nAo responder, cite cada um pela data e hora."
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[ListAppointmentsTool] erro: %s", exc)
+        return "Nao consegui consultar os agendamentos agora. Nao afirme nada sobre eles."
+    finally:
+        db.close()
+
+
+@function_tool(strict_mode=False)
+def cancel_lead_appointments(
+    company_id: Annotated[int, Field(description="ID da empresa")],
+    phone: Annotated[str, Field(description="Telefone do cliente (formato: 5500000000009)")],
+    all_appointments: Annotated[bool, Field(description="true para cancelar TODOS os agendamentos ativos do cliente")] = False,
+    appointment_date: Annotated[str, Field(description="Data especifica a cancelar, DD/MM/AAAA. Ignorada quando all_appointments=true.")] = "",
+    reason: Annotated[str, Field(description="Motivo informado pelo cliente")] = "",
+) -> str:
+    """
+    Cancela todos os agendamentos ativos do cliente (all_appointments=true) ou os de uma data.
+
+    Devolve a lista EXATA do que foi cancelado, com data, hora e profissional.
+    Na resposta ao cliente, repita essa lista item por item: nunca diga "cancelei
+    todos" ou "cancelado" sem dizer quais, e nunca cite um agendamento que nao
+    apareca nesta lista.
+    """
+    from datetime import datetime
+
+    from backend.agents_sdk.tools.calendar_scheduling_tools import _normalize_phone
+    from backend.db import get_db
+    from backend.models import Agenda, Agendamento
+
+    db = next(get_db())
+    try:
+        telefone = _normalize_phone(phone) or phone
+        consulta = (
+            db.query(Agendamento)
+            .filter(
+                Agendamento.company_id == company_id,
+                ~Agendamento.status.ilike("CANCEL%"),
+            )
+            .order_by(Agendamento.consulta_data)
+        )
+        if telefone:
+            consulta = consulta.filter(Agendamento.phone == telefone)
+        ativos = consulta.all()
+
+        if not ativos:
+            return (
+                "Nenhum agendamento ativo para cancelar. Nao diga ao cliente que cancelou: "
+                "confirme com ele se o agendamento existe em outro telefone."
+            )
+
+        alvos = list(ativos)
+        texto_data = str(appointment_date or "").strip()
+        if not all_appointments:
+            if not texto_data:
+                lista = "; ".join(
+                    _descricao_agendamento(
+                        item,
+                        db.query(Agenda).filter(Agenda.id == item.agenda_id).first(),
+                        item.consulta_data,
+                    )
+                    for item in ativos
+                )
+                return (
+                    "Preciso saber quais cancelar. Agendamentos ativos: "
+                    f"{lista}. Use all_appointments=true para todos, ou informe a data."
+                )
+            dia = None
+            for formato in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
+                try:
+                    dia = datetime.strptime(texto_data.replace("-", "/") if formato == "%d/%m/%Y" else texto_data, formato).date()
+                    break
+                except ValueError:
+                    continue
+            if dia is None:
+                return f"Nao entendi a data {texto_data!r}. Peca a data no formato DD/MM/AAAA."
+            alvos = [
+                item for item in ativos
+                if item.consulta_data and item.consulta_data.date() == dia
+            ]
+            if not alvos:
+                return f"Nao ha agendamento ativo em {texto_data}. Nao diga que cancelou."
+
+        cancelados = []
+        for item in alvos:
+            agenda = db.query(Agenda).filter(Agenda.id == item.agenda_id).first()
+            resultado = _cancelar_um_agendamento(db, company_id, item, reason)
+            cancelados.append(
+                f"- {_descricao_agendamento(item, agenda, resultado['quando'])}"
+                + ("" if resultado["google"] in ("deleted", "not_applicable") else " (evento no Google: falhou)")
+            )
+
+        restantes = (
+            db.query(Agendamento)
+            .filter(
+                Agendamento.company_id == company_id,
+                Agendamento.phone == telefone,
+                ~Agendamento.status.ilike("CANCEL%"),
+            )
+            .order_by(Agendamento.consulta_data)
+            .all()
+        )
+        if not telefone:
+            restantes = []
+
+        cabecalho = f"Cancelado(s) {len(cancelados)} agendamento(s):"
+        rodape = (
+            "Nao restou nenhum agendamento ativo."
+            if not restantes
+            else "Ainda restam {} agendamento(s) ativo(s): {}".format(
+                len(restantes),
+                "; ".join(
+                    _descricao_agendamento(item, None, item.consulta_data) for item in restantes
+                ),
+            )
+        )
+        return (
+            cabecalho + "\n" + "\n".join(cancelados) + "\n" + rodape +
+            "\nAo responder ao cliente, cite cada agendamento cancelado pela data e hora."
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("[CancelLeadAppointmentsTool] erro: %s", exc)
+        db.rollback()
+        return (
+            "Nao consegui cancelar agora. Nao diga ao cliente que cancelou: informe que a equipe "
+            "vai confirmar."
+        )
+    finally:
+        db.close()
+
+
 APPOINTMENT_MANAGEMENT_TOOLS = [
     suggest_reschedule_before_cancel,
     confirm_cancellation,
     confirm_lead_appointment,
-    reschedule_appointment
+    reschedule_appointment,
+    list_lead_appointments,
+    cancel_lead_appointments,
 ]
