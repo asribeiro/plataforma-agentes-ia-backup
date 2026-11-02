@@ -60,6 +60,7 @@ from backend.services.ai_credit_guard import (
     get_ai_credit_balance,
 )
 from backend.services.ai_provider_service import (
+    run_with_provider_retry,
     build_company_openai_run_config,
     get_company_openai_api_key,
     openai_run_trace,
@@ -759,15 +760,19 @@ def run_agent_workforce_response(
         multimodal_fallback_error = ""
         multimodal_fallback_used = False
         try:
-            result = _run_coroutine_sync(
-                lambda: _run_agent_sdk(
-                    agent=compiled.root_agent,
-                    runner_input=runner_input,
-                    runtime_context=runtime_context,
-                    max_turns=root_config.runtime.max_turns,
-                    trace_context=trace_context,
-                    run_config=run_config,
-                )
+            # Um soluço do provedor (5xx/429/rede) não pode deixar o paciente sem resposta.
+            result = run_with_provider_retry(
+                lambda: _run_coroutine_sync(
+                    lambda: _run_agent_sdk(
+                        agent=compiled.root_agent,
+                        runner_input=runner_input,
+                        runtime_context=runtime_context,
+                        max_turns=root_config.runtime.max_turns,
+                        trace_context=trace_context,
+                        run_config=run_config,
+                    )
+                ),
+                label=f"agent_workforce:{workforce_id}:{root_agent_key}",
             )
         except (InputGuardrailTripwireTriggered, OutputGuardrailTripwireTriggered) as guardrail_error:
             execution_time_ms = int((time.perf_counter() - started_at) * 1000)

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from datetime import datetime, timezone
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from agents import RunConfig, trace
 from agents.models.openai_provider import OpenAIProvider
@@ -23,6 +25,8 @@ from sqlalchemy.orm import Session
 
 from backend.models import AIProviderCredential, AgentWorkforce
 from backend.runtime_settings import APP_NAME
+
+logger = logging.getLogger(__name__)
 
 
 OPENAI_PROVIDER = "openai"
@@ -75,6 +79,46 @@ class AIProviderValidationError(AIProviderCredentialError):
 
 class AIProviderCompatibilityError(AIProviderCredentialError):
     """A valid credential cannot run models already saved by the company."""
+
+
+TRANSIENT_PROVIDER_ATTEMPTS = 3
+TRANSIENT_PROVIDER_BACKOFF_SECONDS = (2, 6)
+
+
+def is_transient_provider_error(exc: Exception) -> bool:
+    """Soluço do provedor (fila, 5xx, rede) — vale tentar de novo; credencial inválida não."""
+
+    if isinstance(exc, (RateLimitError, APIConnectionError, APITimeoutError)):
+        return True
+    if isinstance(exc, (AuthenticationError, PermissionDeniedError)):
+        return False
+    if isinstance(exc, APIStatusError):
+        status_code = int(getattr(exc, "status_code", 0) or 0)
+        return status_code >= 500 or status_code in (408, 409, 429)
+    return False
+
+
+def run_with_provider_retry(operation: Callable[[], Any], *, label: str = "agente") -> Any:
+    """Executa a operação e tenta de novo apenas em erro transitório do provedor."""
+
+    tentativas = len(TRANSIENT_PROVIDER_BACKOFF_SECONDS) + 1
+    for tentativa in range(1, tentativas + 1):
+        try:
+            return operation()
+        except Exception as exc:  # noqa: BLE001
+            if tentativa >= tentativas or not is_transient_provider_error(exc):
+                raise
+            espera = TRANSIENT_PROVIDER_BACKOFF_SECONDS[tentativa - 1]
+            logger.warning(
+                "[AIProvider] %s falhou por instabilidade (%s), tentativa %s/%s; nova tentativa em %ss",
+                label,
+                type(exc).__name__,
+                tentativa,
+                tentativas,
+                espera,
+            )
+            time.sleep(espera)
+    return operation()
 
 
 def safe_ai_provider_runtime_error(
@@ -252,10 +296,19 @@ def _validation_error_from_exception(exc: Exception) -> AIProviderValidationErro
             http_status_code=503,
         )
     if isinstance(exc, APIStatusError):
+        # Só 401/403 são problema de credencial. 429/5xx/409 são instabilidade do provedor: tratar
+        # como "invalid" enganava o diagnóstico (foi o que aconteceu no run 84, com a chave boa).
+        status_code = int(getattr(exc, "status_code", 0) or 0)
+        if status_code in (401, 403):
+            return AIProviderValidationError(
+                "A OpenAI recusou a validação da chave",
+                credential_status="invalid",
+                http_status_code=400,
+            )
         return AIProviderValidationError(
-            "A OpenAI recusou a validação da chave",
-            credential_status="invalid",
-            http_status_code=400,
+            f"O provedor de IA está instável (HTTP {status_code or 'desconhecido'})",
+            credential_status="error",
+            http_status_code=503,
         )
     return AIProviderValidationError(
         "Não foi possível validar a chave OpenAI",
