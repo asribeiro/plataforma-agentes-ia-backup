@@ -244,6 +244,22 @@ def _normalize_contact_phone_for_storage(db: Session, company_id: int, phone: st
             "clean_phone": clean_phone,
             "clean_lid": f"{clean_phone}@lid",
         }).fetchone()
+        if not row:
+            # LID ainda não mapeado em `contacts`: resolve pela API do WAHA antes de gravar.
+            try:
+                from backend.services.phone_canonical import canonical_phone_for_storage
+
+                resolvido = canonical_phone_for_storage(db, company_id, raw_phone)
+                if resolvido and resolvido != raw_phone and resolvido != clean_phone:
+                    logger.info(
+                        "[Webhook] phone de saída resolvido por LID: raw=%s canonical=%s",
+                        raw_phone,
+                        resolvido,
+                    )
+                    return resolvido
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("[Webhook] resolução de LID falhou: %s", exc)
+
         if row and getattr(row, "phone", None):
             canonical = str(row.phone).strip()
             if canonical and canonical != raw_phone:

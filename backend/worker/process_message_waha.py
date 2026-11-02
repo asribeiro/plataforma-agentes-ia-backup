@@ -328,6 +328,13 @@ def _lid_para_telefone(session_name: str, lid: str) -> Optional[str]:
         return None
 
 
+def _telefone_valido(phone: Any) -> bool:
+    """Telefone de contato tem 10 a 13 dígitos. LID, vazio e "0@c.us" não servem para gravar."""
+
+    valor = str(phone or "").strip()
+    return bool(re.fullmatch(r"\d{10,13}", valor))
+
+
 def _clean_waha_chat_id(value: Any) -> str:
     text_value = str(value or "").strip()
     return (
@@ -1852,6 +1859,19 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
             logger.info(f"[WAHA Task] 🎯 Mensagem marcada como fromApi=true (source={message_source})")
         elif from_me:
             logger.info(f"[WAHA Task] 🎯 Mensagem própria externa marcada como fromApi=false (source={message_source or 'unknown'})")
+
+        # Payload sem remetente identificável (o WAHA às vezes manda from="0@c.us" em mídia):
+        # gravar isso cria um "contato" fantasma invisível na plataforma. Melhor não gravar.
+        if not _telefone_valido(phone):
+            logger.warning(
+                "[WAHA Task] Telefone inválido no payload (%r); evento descartado para não sujar a conversa",
+                phone,
+            )
+            if audit_id:
+                update_audit_status(
+                    db, audit_id, "ignored", error="Telefone do remetente inválido no payload"
+                )
+            return
 
         # Verificar duplicação e necessidade de atualização (enrichment)
         # IMPORTANTE: isso precisa rodar para mensagens recebidas também (from_api=False),

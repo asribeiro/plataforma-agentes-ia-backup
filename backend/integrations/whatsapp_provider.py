@@ -448,6 +448,15 @@ def _persist_waha_message(
 
         client_id = client_data.client_id
 
+        # O destino pode vir como ID oculto (LID) ou "0": gravar assim esconde a mensagem da
+        # conversa na plataforma (ela lista por telefone do contato).
+        try:
+            from backend.services.phone_canonical import canonical_phone_for_storage
+
+            phone = canonical_phone_for_storage(db, company_id, phone) or phone
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[Persistence] canonical phone falhou: %s", exc)
+
         # Content handling for media
         final_content = content
         if not final_content and media_url:
