@@ -323,8 +323,36 @@ def create_calendar_scheduling_tools(
         somando todas as agendas ativas e diz o profissional de cada um.
         """
 
-        _ = context
         from backend.db import get_db
+
+        # Trava anti-loop: o paciente respondeu só o número da opção e a lista que eu ofereci ainda
+        # está valendo. Reoferecer horários aqui é exatamente o defeito que travou a conversa em
+        # 02/11/2026 (o agente repetia a mesma lista a cada "1"). A escolha tem de virar reserva.
+        runtime_ctx = getattr(context, "context", None)
+        telefone_ctx = str(getattr(runtime_ctx, "contact_phone", "") or "")
+        ultima_mensagem = str(getattr(runtime_ctx, "latest_user_message", "") or "").strip()
+        if telefone_ctx and re.fullmatch(r"[1-9]", ultima_mensagem):
+            opcao_escolhida = _ler_oferta(
+                company_id=company_id, phone=telefone_ctx, numero=int(ultima_mensagem)
+            )
+            if opcao_escolhida:
+                logger.info(
+                    "[Oferta] paciente escolheu a opcao %s (%s); recusando reoferecer horarios",
+                    ultima_mensagem,
+                    opcao_escolhida.get("display"),
+                )
+                return {
+                    "success": False,
+                    "error": "offer_pending",
+                    "escolha_do_paciente": int(ultima_mensagem),
+                    "horario_escolhido": opcao_escolhida.get("display"),
+                    "message_for_agent": (
+                        f"O paciente JÁ ESCOLHEU a opção {ultima_mensagem} "
+                        f"({opcao_escolhida.get('display')}). NÃO ofereça horários de novo. "
+                        f"Chame create_lead_appointment com option_number={ultima_mensagem} agora "
+                        "e confirme em uma frase."
+                    ),
+                }
 
         db = next(get_db())
         try:
