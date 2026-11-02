@@ -19,6 +19,23 @@ from agents import function_tool
 logger = logging.getLogger(__name__)
 
 
+def _nome_do_profissional(db: Session, agenda) -> str:
+    """Nome do profissional da agenda (o modelo Agenda guarda professional_id, nao o nome)."""
+    if agenda is None:
+        return ""
+    try:
+        if getattr(agenda, "professional_id", None):
+            from backend.models import Professional
+
+            profissional = db.query(Professional).filter(
+                Professional.id == agenda.professional_id).first()
+            if profissional is not None and getattr(profissional, "name", None):
+                return profissional.name
+    except Exception:  # noqa: BLE001
+        pass
+    return getattr(agenda, "name", "") or ""
+
+
 def _cancelar_um_agendamento(db: Session, company_id: int, agendamento, motivo: str = "") -> dict:
     """Cancela UM agendamento: marca CANCELLED, apaga o evento no Google e os lembretes.
 
@@ -33,8 +50,8 @@ def _cancelar_um_agendamento(db: Session, company_id: int, agendamento, motivo: 
     resultado = {
         "id": agendamento.id,
         "quando": None,
-        "profissional": getattr(agenda, "profissional_nome", None) or getattr(agenda, "nome", None),
-        "agenda": getattr(agenda, "nome", None),
+        "profissional": _nome_do_profissional(db, agenda),
+        "agenda": getattr(agenda, "name", None),
         "google": "not_applicable",
         "lembretes": 0,
     }
@@ -85,13 +102,15 @@ def _cancelar_um_agendamento(db: Session, company_id: int, agendamento, motivo: 
     return resultado
 
 
-def _descricao_agendamento(agendamento, agenda, quando) -> str:
+def _descricao_agendamento(db, agendamento, agenda, quando) -> str:
     partes = []
     if quando:
         partes.append(quando.strftime("%d/%m/%Y as %H:%M"))
-    profissional = getattr(agenda, "profissional_nome", None) or getattr(agenda, "nome", None)
+    profissional = _nome_do_profissional(db, agenda)
     if profissional:
         partes.append(f"com {profissional}")
+    elif getattr(agenda, "name", None):
+        partes.append(f"({agenda.name})")
     if getattr(agendamento, "interesse", None):
         partes.append(f"({agendamento.interesse})")
     return " ".join(partes) or f"agendamento {agendamento.id}"
@@ -738,7 +757,7 @@ def list_lead_appointments(
                     fuso = ZoneInfo("America/Sao_Paulo")
                 quando = item.consulta_data.astimezone(fuso)
             linhas.append(
-                f"{indice}) {_descricao_agendamento(item, agenda, quando)} - {item.status}"
+                f"{indice}) {_descricao_agendamento(db, item, agenda, quando)} - {item.status}"
             )
         return (
             f"{len(registros)} agendamento(s) encontrado(s):\n" + "\n".join(linhas) +
@@ -799,7 +818,7 @@ def cancel_lead_appointments(
         if not all_appointments:
             if not texto_data:
                 lista = "; ".join(
-                    _descricao_agendamento(
+                    _descricao_agendamento(db,
                         item,
                         db.query(Agenda).filter(Agenda.id == item.agenda_id).first(),
                         item.consulta_data,
@@ -831,7 +850,7 @@ def cancel_lead_appointments(
             agenda = db.query(Agenda).filter(Agenda.id == item.agenda_id).first()
             resultado = _cancelar_um_agendamento(db, company_id, item, reason)
             cancelados.append(
-                f"- {_descricao_agendamento(item, agenda, resultado['quando'])}"
+                f"- {_descricao_agendamento(db, item, agenda, resultado['quando'])}"
                 + ("" if resultado["google"] in ("deleted", "not_applicable") else " (evento no Google: falhou)")
             )
 
@@ -855,7 +874,7 @@ def cancel_lead_appointments(
             else "Ainda restam {} agendamento(s) ativo(s): {}".format(
                 len(restantes),
                 "; ".join(
-                    _descricao_agendamento(item, None, item.consulta_data) for item in restantes
+                    _descricao_agendamento(db, item, None, item.consulta_data) for item in restantes
                 ),
             )
         )

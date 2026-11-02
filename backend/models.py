@@ -756,6 +756,23 @@ class AgendaSchedule(Base):
         UniqueConstraint('agenda_id', 'day_of_week', name='uq_agenda_day'),
     )
 
+class AgendamentoAuditoria(Base):
+    """Espelho de auditoria de `agendamentos` (preenchido por trigger no banco).
+
+    Existe para provar quem cancelou/alterou/apagou um agendamento — a tabela original não tem
+    created_at/updated_at e um DELETE silencioso deixava a agenda e o Google divergentes sem rastro.
+    """
+
+    __tablename__ = "agendamentos_auditoria"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    agendamento_id = Column(Integer, nullable=True, index=True)
+    operacao = Column(String(10), nullable=False)
+    dados = Column(JSON, nullable=True)
+    usuario = Column(String(120), nullable=True)
+    quando = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Agendamento(Base):
     __tablename__ = "agendamentos"
 
