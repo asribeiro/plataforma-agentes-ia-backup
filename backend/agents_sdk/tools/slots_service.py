@@ -11,6 +11,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text, and_, or_
 from ..database.models import CompanySlot
 
+# Decisão do produto: o agente atende TODOS os dias, 24h. Feriado é aviso para a clínica
+# (selo e hachura na grade), não bloqueio para o atendimento.
+AGENTE_RESPEITA_FERIADO = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -175,7 +179,13 @@ class SlotsService:
             schedules_map = {s.day_of_week: s for s in agenda.schedules}
 
             def _bloqueado_por_feriado(dia) -> bool:
-                """Feriado fecha o dia; excecao por profissional libera (services/feriados.py)."""
+                """Feriado NAO bloqueia o agente: ele atende todos os dias, 24h (decisao do dono).
+
+                O feriado continua valendo para a clinica (selo na grade e POST manual da API).
+                Para voltar a bloquear o agente, troque AGENTE_RESPEITA_FERIADO para True.
+                """
+                if not AGENTE_RESPEITA_FERIADO:
+                    return False
                 try:
                     from backend.services import feriados as servico_feriados
 

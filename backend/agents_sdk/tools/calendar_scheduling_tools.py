@@ -1365,8 +1365,19 @@ def _ordenar_por_horario_preferido(
     return sorted(slots, key=chave)
 
 
+# Decisão do produto: o agente atende TODOS os dias, 24h por dia. Feriado é aviso para a clínica
+# (selo e hachura na grade), não bloqueio para o atendimento — o paciente não pode ficar sem
+# resposta por causa de calendário. Para voltar a bloquear o agente em feriado, troque para True.
+AGENTE_RESPEITA_FERIADO = False
+
 def _dia_bloqueado_por_feriado(*, db: Session, agenda: Agenda, dia: date) -> bool:
-    """True quando o dia é feriado e este profissional NAO foi liberado pela clínica."""
+    """Feriado NÃO bloqueia o agente (ele atende 24h todos os dias).
+
+    A checagem fica aqui, desligada por constante, porque a decisão é de produto — e o serviço de
+    feriados continua sendo a fonte da verdade para a clínica (grade e API manual).
+    """
+    if not AGENTE_RESPEITA_FERIADO:
+        return False
     try:
         from backend.services import feriados as servico_feriados
 
