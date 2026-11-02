@@ -166,6 +166,12 @@ export const CalendarView: React.FC<CalendarViewProps> = () => {
         };
     }, [currentDate, viewMode]);
 
+    // Lista de agendas do profissional: é daqui que sai o <select> e o `selectedAgenda`.
+    // Sem este efeito a grade não existe (o resto depende de `selectedAgenda`).
+    useEffect(() => {
+        loadAgendas();
+    }, []);
+
     useEffect(() => {
         if (selectedAgendaId) {
             const agenda = agendas.find(a => a.id === selectedAgendaId);

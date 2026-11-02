@@ -51,12 +51,12 @@ export interface FeriadosDoAno {
 
 export const feriadosApi = {
     async listar(ano: number): Promise<FeriadosDoAno> {
-        const { data } = await api.get<FeriadosDoAno>('/feriados', { params: { ano } });
+        const { data } = await api.get<FeriadosDoAno>('/api/feriados', { params: { ano } });
         return data;
     },
 
     async definirLiberacoes(feriadoId: number, professionalIds: number[]) {
-        const { data } = await api.put(`/feriados/${feriadoId}/liberacoes`, {
+        const { data } = await api.put(`/api/feriados/${feriadoId}/liberacoes`, {
             professional_ids: professionalIds,
         });
         return data as { ok: boolean; liberados: number[] };
@@ -70,17 +70,17 @@ export const feriadosApi = {
         cidade?: string | null;
         recorrente?: boolean;
     }) {
-        const { data } = await api.post('/feriados', payload);
+        const { data } = await api.post('/api/feriados', payload);
         return data as { ok: boolean; feriado_id: number; ja_existia?: boolean };
     },
 
     async importar(ano: number) {
-        const { data } = await api.post('/feriados/importar', null, { params: { ano } });
+        const { data } = await api.post('/api/feriados/importar', null, { params: { ano } });
         return data as { ok: boolean; ano: number; importados: number; ja_existiam: number };
     },
 
     async apagar(feriadoId: number) {
-        const { data } = await api.delete(`/feriados/${feriadoId}`);
+        const { data } = await api.delete(`/api/feriados/${feriadoId}`);
         return data as { ok: boolean };
     },
 };
