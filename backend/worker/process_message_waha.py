@@ -285,6 +285,49 @@ def _normalized_summary(normalized_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _lid_para_telefone(session_name: str, lid: str) -> Optional[str]:
+    """Resolve "140501365833969@lid" para o telefone real, com cache em Redis.
+
+    O WAHA entrega as mensagens enviadas com `to` = LID do contato. Sem resolver, a conversa se
+    parte em dois contatos (entrada no telefone, saída no LID). Cache de 7 dias porque o
+    mapeamento LID -> telefone é estável e a API do WAHA é lenta.
+    """
+    if not lid or "@lid" not in lid:
+        return None
+
+    chave = f"waha:lid2phone:{lid}"
+    try:
+        import redis  # type: ignore
+
+        from backend.config import REDIS_URL
+
+        cache = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=2)
+        guardado = cache.get(chave)
+        if guardado:
+            return guardado
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WAHA Normalize] cache de LID indisponivel: %s", exc)
+        cache = None
+
+    try:
+        from backend.config import WAHA_API_KEY, WAHA_BASE_URL
+        from backend.integrations.waha_sdk import get_client
+
+        if not WAHA_API_KEY:
+            return None
+        cliente = get_client(base_url=WAHA_BASE_URL, api_key=WAHA_API_KEY)
+        resolvido = cliente.get_phone_by_lid(session_name or "default", lid)
+        if resolvido and cache is not None:
+            try:
+                cache.setex(chave, 7 * 24 * 3600, resolvido)
+            except Exception:  # noqa: BLE001
+                pass
+        return resolvido
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WAHA Normalize] falha ao resolver LID %s: %s", lid, exc)
+        return None
+
+
 def _clean_waha_chat_id(value: Any) -> str:
     text_value = str(value or "").strip()
     return (
@@ -672,6 +715,26 @@ def normalize_waha_payload(waha_data: Dict[str, Any]) -> Dict[str, Any]:
                 "[WAHA Normalize] Mensagem enviada (fromMe), destinatário resolvido: %s",
                 phone,
             )
+            # Destinatário pode vir como LID (id oculto): sem resolver, a mensagem enviada fica
+            # num contato separado do que recebeu. O cache evita uma chamada de API por mensagem.
+            lid_bruto = ""
+            for candidate in recipient_candidates:
+                if candidate and "@lid" in str(candidate):
+                    lid_bruto = str(candidate)
+                    break
+            if lid_bruto:
+                telefone_real = _lid_para_telefone(waha_data.get("session", "default"), lid_bruto)
+                if telefone_real:
+                    logger.info(
+                        "[WAHA Normalize] LID do destinatário resolvido: %s -> %s",
+                        lid_bruto,
+                        telefone_real,
+                    )
+                    phone = telefone_real
+                else:
+                    logger.warning(
+                        "[WAHA Normalize] LID %s nao resolvido; mantendo o id oculto", lid_bruto
+                    )
         else:
             phone = _clean_waha_chat_id(from_field)
             logger.warning(

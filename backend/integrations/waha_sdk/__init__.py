@@ -575,7 +575,12 @@ class WAHAClient:
             response = self._request('GET', f'/api/{session}/lids/{clean_lid}')
 
             if response and 'pn' in response:
-                pn = response['pn']
+                # A API devolve `pn: null` quando não conhece o LID; sem este guarda o
+                # `'@' in pn` estourava com "argument of type 'NoneType' is not iterable".
+                pn = response.get('pn') or ""
+                if not pn:
+                    logger.info(f"[WAHA] LID {lid} sem telefone conhecido (pn nulo)")
+                    return None
                 # Remover sufixo @c.us se existir
                 clean_pn = pn.split('@')[0] if '@' in pn else pn
                 logger.info(f"[WAHA] LID {lid} resolvido para {clean_pn}")
