@@ -8,6 +8,7 @@ Scheduling capability in the agent builder.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import date, datetime, time, timedelta
@@ -199,6 +200,78 @@ def _cancelar_tarefas_de_lembrete(db: Session, company_id: int, appointment_id: 
     return {"canceladas": canceladas, "total_encontradas": len(tarefas)}
 
 
+# ---------------------------------------------------------------------------
+# Última oferta de horários por telefone (número da opção -> horário real).
+#
+# O paciente responde "1" e o modelo não tem como adivinhar o horário: guardamos a lista oferecida
+# em Redis (TTL de 1h) para que `create_lead_appointment(option_number=N)` resolva sozinho.
+# ---------------------------------------------------------------------------
+OFERTA_TTL_SEGUNDOS = 3600
+
+
+def _chave_oferta(company_id: int, phone: str) -> str:
+    return f"agenda:oferta:{company_id}:{_normalize_phone(phone)}"
+
+
+def _redis_ofertas():
+    """Cliente Redis ou None: oferta é conveniência, nunca motivo para derrubar a tool."""
+    try:
+        import redis  # type: ignore
+
+        from backend.config import REDIS_URL
+
+        return redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_timeout=2)
+    except Exception as exc:  # pragma: no cover - ambiente sem redis
+        logger.warning("[Oferta] Redis indisponivel: %s", exc)
+        return None
+
+
+def _salvar_oferta(*, company_id: int, phone: str, slots: list, agenda_id: Optional[int] = None) -> None:
+    if not phone or not slots:
+        return
+    cliente = _redis_ofertas()
+    if cliente is None:
+        return
+    opcoes = []
+    for numero, slot in enumerate(slots[:6], start=1):
+        opcoes.append(
+            {
+                "n": numero,
+                "start_time": slot.get("start_time") or "",
+                "display": slot.get("display") or "",
+                "agenda_id": slot.get("agenda_id") or agenda_id,
+            }
+        )
+    try:
+        cliente.setex(
+            _chave_oferta(company_id, phone),
+            OFERTA_TTL_SEGUNDOS,
+            json.dumps({"opcoes": opcoes, "criado_em": datetime.now().isoformat()}),
+        )
+        logger.info("[Oferta] %s opcao(oes) guardada(s) para %s", len(opcoes), phone)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("[Oferta] falha ao gravar: %s", exc)
+
+
+def _ler_oferta(*, company_id: int, phone: str, numero: int) -> Optional[dict]:
+    if not phone:
+        return None
+    cliente = _redis_ofertas()
+    if cliente is None:
+        return None
+    try:
+        bruto = cliente.get(_chave_oferta(company_id, phone))
+        if not bruto:
+            return None
+        opcoes = json.loads(bruto).get("opcoes") or []
+        for opcao in opcoes:
+            if int(opcao.get("n") or 0) == int(numero):
+                return opcao
+    except Exception as exc:  # pragma: no cover
+        logger.warning("[Oferta] falha ao ler: %s", exc)
+    return None
+
+
 def create_calendar_scheduling_tools(
     *,
     company_id: int,
@@ -324,6 +397,16 @@ def create_calendar_scheduling_tools(
             now = datetime.now(tz)
             earliest_bookable = now + timedelta(minutes=agenda.safety_margin_minutes or 0)
 
+            # Guarda o que está sendo oferecido: se o lead responder "1", a reserva resolve o
+            # horário sem depender de o modelo lembrar a lista.
+            apresentados = slots or next_available_slots
+            _salvar_oferta(
+                company_id=company_id,
+                phone=str(getattr(getattr(context, "context", None), "contact_phone", "") or ""),
+                slots=apresentados,
+                agenda_id=getattr(agenda, "id", None),
+            )
+
             return {
                 "success": True,
                 "agenda": _agenda_payload(agenda),
@@ -364,8 +447,9 @@ def create_calendar_scheduling_tools(
     @function_tool(strict_mode=False)
     async def create_lead_appointment(
         context: RunContextWrapper,
-        selected_start_time: Annotated[str, Field(description="Horário escolhido em ISO, YYYY-MM-DD HH:MM ou DD/MM/YYYY HH:MM.")],
-        lead_name: Annotated[str, Field(description="Nome do lead confirmado na conversa.")],
+        selected_start_time: Annotated[str, Field(description="Horário escolhido em ISO, YYYY-MM-DD HH:MM ou DD/MM/YYYY HH:MM. Se o lead escolheu pelo NÚMERO da lista oferecida (\"1\", \"2\"...), deixe vazio e preencha `option_number`.")] = "",
+        lead_name: Annotated[str, Field(description="Nome do lead confirmado na conversa.")] = "",
+        option_number: Annotated[Optional[int], Field(description="Número da opção que o lead escolheu na última lista oferecida (1 = primeira). Use quando ele responder \"1\", \"2\", \"a primeira\", \"a de 16h\" referindo-se à lista.")] = None,
         lead_phone: Annotated[str, Field(description="Telefone do lead. Vazio usa o telefone do contexto da conversa.")] = "",
         agenda_id: Annotated[Optional[int], Field(description="ID da agenda da plataforma. Opcional quando houver agenda configurada ou apenas uma agenda ativa.")] = None,
         agenda_name: Annotated[str, Field(description="Nome aproximado da agenda, se não houver ID.")] = "",
@@ -410,6 +494,39 @@ def create_calendar_scheduling_tools(
                 return agenda_result
 
             agenda: Agenda = agenda_result["agenda"]
+
+            # "1" (ou option_number) = escolha da última lista oferecida. Resolve pelo Redis em vez
+            # de exigir que o modelo repita o horário.
+            runtime_ctx = getattr(context, "context", None)
+            telefone_ctx = str(getattr(runtime_ctx, "contact_phone", "") or lead_phone or "")
+            escolha = option_number
+            if escolha is None and str(selected_start_time or "").strip().isdigit():
+                escolha = int(str(selected_start_time).strip())
+            if escolha is not None:
+                opcao = _ler_oferta(company_id=company_id, phone=telefone_ctx, numero=escolha)
+                if opcao is None:
+                    return {
+                        "success": False,
+                        "error": "offer_expired",
+                        "message_for_agent": (
+                            "Não tenho mais a lista de horários que ofereci (expirou). "
+                            "Consulte os horários de novo e ofereça as opções atualizadas."
+                        ),
+                    }
+                selected_start_time = opcao.get("start_time") or selected_start_time
+                if opcao.get("agenda_id") and not agenda_id:
+                    agenda_id = opcao.get("agenda_id")
+                    logger.info("[Oferta] opcao %s resolvida para %s (agenda %s)",
+                                escolha, selected_start_time, agenda_id)
+            if not str(selected_start_time or "").strip():
+                return {
+                    "success": False,
+                    "error": "missing_start_time",
+                    "message_for_agent": (
+                        "Preciso do horário: pergunte ao lead qual opção ele quer e chame de novo "
+                        "com `option_number` (1, 2, 3...) ou com o horário completo."
+                    ),
+                }
             starts_at = _parse_datetime(selected_start_time, agenda.timezone)
             ends_at = starts_at + timedelta(minutes=agenda.slot_duration or 30)
             availability = _validate_slot_availability(
