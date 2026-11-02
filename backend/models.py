@@ -317,6 +317,21 @@ class Message(Base):
     client = relationship("Client", back_populates="messages")
     company = relationship("Company", foreign_keys=[company_id])
 
+    # Uma mensagem do WhatsApp = uma linha. O WAHA entrega o mesmo conteúdo em dois eventos
+    # (`message` e `message.any`); sem esta restrição as duas tasks Celery inseriam a mesma
+    # mensagem quando rodavam juntas (13 duplicatas em produção, 02/11/2026). O worker já trata
+    # erro de chave duplicada (rollback + reler), então a segunda inserção não aciona o agente.
+    __table_args__ = (
+        Index(
+            "uq_messages_company_zapi",
+            "company_id",
+            "zapi_message_id",
+            unique=True,
+            postgresql_where=text("zapi_message_id IS NOT NULL AND zapi_message_id <> ''"),
+        ),
+    )
+
+
 class Contact(Base):
     __tablename__ = "contacts"
 
