@@ -36,7 +36,7 @@ class AIProviderCredential(Base):
     available_models = Column(
         JSONB,
         nullable=False,
-        server_default=text("'[]'::jsonb"),
+        server_default="[]",
     )
     last_validated_at = Column(TIMESTAMP(timezone=True), nullable=True)
     last_error = Column(Text, nullable=True)

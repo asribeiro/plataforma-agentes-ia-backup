@@ -68,6 +68,17 @@ Preencha os dois arquivos locais, crie o PostgreSQL e então execute:
 cd backend
 alembic upgrade head
 cd ..
+```
+
+Para demonstração local do módulo de prontuário, com o banco já migrado:
+
+```bash
+source .venv/bin/activate
+set -a && . backend/.env && set +a
+python backend/scripts/seed_prontuario_demo.py
+```
+
+O seed cria apenas dados fictícios em duas clínicas de demonstração, com pacientes, tratamentos, consultas, no-shows e respostas NPS.
 
 python -m backend.scripts.bootstrap_admin \
   --email admin@exemplo.com \

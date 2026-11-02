@@ -36,7 +36,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user
-from backend.db import get_db
+from backend.db import get_db, set_clinic_context
 from backend.models import Client, ClinicalAccessLog, User
 
 logger = logging.getLogger(__name__)
@@ -111,6 +111,24 @@ exigir_papel_clinico = exigir_papel(*PAPEIS_QUE_VEEM_PRONTUARIO)
 exigir_admin_de_usuarios = exigir_papel(*PAPEIS_QUE_ADMINISTRAM_USUARIOS)
 
 
+def configurar_contexto_clinico(db: Session, usuario) -> int:
+    """Aplica o tenant autenticado à transação antes de acessar dados clínicos."""
+    company_id = getattr(usuario, "company_id", None)
+    if not company_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Usuário não está vinculado a uma empresa",
+        )
+    try:
+        set_clinic_context(db, company_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Clínica inválida para o usuário autenticado",
+        ) from exc
+    return int(company_id)
+
+
 def registrar_acesso_clinico(
     db: Session,
     usuario,
@@ -126,12 +144,7 @@ def registrar_acesso_clinico(
     que acesso negado — e o contrario do padrao "nao deixar o log derrubar a
     feature", que vale para metricas, nao para dado de saude.
     """
-    company_id = getattr(usuario, "company_id", None)
-    if not company_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Usuário não está vinculado a uma empresa",
-        )
+    company_id = configurar_contexto_clinico(db, usuario)
 
     registro = ClinicalAccessLog(
         company_id=company_id,
@@ -160,6 +173,7 @@ def listar_acessos(
     user_email: Optional[str] = None,
 ) -> list:
     """Consulta do log para o Admin Clinica auditor (quem, quando, qual paciente)."""
+    set_clinic_context(db, company_id)
     q = db.query(ClinicalAccessLog).filter(ClinicalAccessLog.company_id == company_id)
     if patient_id is not None:
         q = q.filter(ClinicalAccessLog.patient_id == patient_id)

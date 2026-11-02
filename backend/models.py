@@ -100,8 +100,8 @@ class Company(Base):
     instagram = Column(String(255), nullable=True)
     ai_whatsapp = Column(String(30), nullable=True)
     accepts_insurance = Column(Boolean, nullable=False, server_default=text("false"))
-    accepted_insurance = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    business_hours = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    accepted_insurance = Column(JSONB, nullable=False, server_default="[]")
+    business_hours = Column(JSONB, nullable=False, server_default="{}")
     administrative_responsible_name = Column(String(255), nullable=True)
     administrative_responsible_email = Column(String(255), nullable=True)
     administrative_responsible_phone = Column(String(30), nullable=True)
@@ -176,7 +176,7 @@ class CompanyRegistrationDraft(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     created_by_client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    payload = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    payload = Column(JSONB, nullable=False, server_default="{}")
     logo_url = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, server_default=text("'draft'"))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
@@ -207,7 +207,7 @@ class CompanyAuditEvent(Base):
     action = Column(String(50), nullable=False)
     before_data = Column(JSONB, nullable=True)
     after_data = Column(JSONB, nullable=True)
-    metadata_json = Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    metadata_json = Column("metadata", JSONB, nullable=False, server_default="{}")
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
 
     company = relationship("Company", foreign_keys=[company_id])
@@ -312,7 +312,7 @@ class Message(Base):
     delivery_ack = Column(Integer, nullable=True)
     delivery_status_updated_at = Column(TIMESTAMP(timezone=True), nullable=True)
     reply_to = Column(JSONB, nullable=True)
-    reactions = Column(JSONB, server_default=text("'[]'::jsonb"), nullable=False)
+    reactions = Column(JSONB, server_default="[]", nullable=False)
 
     client = relationship("Client", back_populates="messages")
     company = relationship("Company", foreign_keys=[company_id])
@@ -2120,7 +2120,7 @@ class Flow(Base):
 
     # Tipo de trigger: 'webhook' (genérico), 'whatsapp' (WAHA messages)
     trigger_type = Column(String(50), default='webhook', nullable=False)
-    trigger_config = Column(JSONB, server_default=text("'{}'::jsonb"), nullable=False)
+    trigger_config = Column(JSONB, server_default="{}", nullable=False)
 
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -2147,7 +2147,7 @@ class FlowEnrollment(Base):
     stage_id = Column(Integer, ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True)
     trigger_type = Column(String(50), nullable=False)
     anchor_at = Column(TIMESTAMP(timezone=True), nullable=True)
-    trigger_payload = Column(JSONB, server_default=text("'{}'::jsonb"), nullable=False)
+    trigger_payload = Column(JSONB, server_default="{}", nullable=False)
     status = Column(String(30), server_default='active', nullable=False)
     cancel_reason = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
@@ -2414,6 +2414,230 @@ class ClinicalAccessLog(Base):
         Index("idx_clinical_access_patient", "patient_id", "created_at"),
         Index("idx_clinical_access_user", "user_id", "created_at"),
     )
+
+
+class Patient(Base):
+    """Paciente do prontuario, isolado pelo tenant da clinica."""
+
+    __tablename__ = "patients"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    cpf = Column(String(11), nullable=True)
+    birth_date = Column(Date, nullable=True)
+    phone = Column(String(30), nullable=True)
+    email = Column(String(255), nullable=True)
+    insurance = Column(String(160), nullable=True)
+    source = Column(String(80), nullable=True)
+    lead_id = Column(Integer, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True)
+    lifecycle_status = Column(String(30), nullable=False, server_default=text("'lead'"))
+    lgpd_consent_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    lgpd_consent_version = Column(String(40), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_patients_clinic_name", "clinic_id", "name"),
+        Index("idx_patients_clinic_phone", "clinic_id", "phone"),
+        Index("idx_patients_clinic_lifecycle", "clinic_id", "lifecycle_status"),
+        Index("uq_patients_clinic_cpf", "clinic_id", "cpf", unique=True, postgresql_where=text("cpf IS NOT NULL")),
+    )
+
+
+class Treatment(Base):
+    __tablename__ = "treatments"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="RESTRICT"), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False, server_default=text("'proposed'"))
+    total_value = Column(Numeric(12, 2), nullable=False, server_default=text("0"))
+    start_date = Column(Date, nullable=True)
+    expected_end_date = Column(Date, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    procedures = relationship("TreatmentProcedure", back_populates="treatment", cascade="all, delete-orphan")
+    __table_args__ = (
+        Index("idx_treatments_clinic_patient_status", "clinic_id", "patient_id", "status"),
+    )
+
+
+class TreatmentProcedure(Base):
+    __tablename__ = "treatment_procedures"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    treatment_id = Column(String(36), ForeignKey("treatments.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(255), nullable=False)
+    tooth_region = Column(String(120), nullable=True)
+    value = Column(Numeric(12, 2), nullable=False, server_default=text("0"))
+    status = Column(String(20), nullable=False, server_default=text("'pending'"))
+    recurrence_frequency = Column(String(20), nullable=True)
+    recurrence_interval = Column(Integer, nullable=True)
+    recurrence_sessions = Column(Integer, nullable=True)
+    recurrence_end_date = Column(Date, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    treatment = relationship("Treatment", back_populates="procedures")
+    __table_args__ = (
+        Index("idx_treatment_procedures_clinic_treatment", "clinic_id", "treatment_id"),
+    )
+
+
+class PatientAppointment(Base):
+    __tablename__ = "patient_appointments"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="RESTRICT"), nullable=False)
+    treatment_procedure_id = Column(String(36), ForeignKey("treatment_procedures.id", ondelete="SET NULL"), nullable=True)
+    starts_at = Column(TIMESTAMP(timezone=True), nullable=False)
+    duration_minutes = Column(Integer, nullable=False)
+    source = Column(String(30), nullable=False)
+    status = Column(String(30), nullable=False, server_default=text("'scheduled'"))
+    cancellation_reason = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_patient_appointments_clinic_start", "clinic_id", "starts_at"),
+        Index("idx_patient_appointments_clinic_status", "clinic_id", "status"),
+    )
+
+
+class ClinicalNote(Base):
+    __tablename__ = "clinical_notes"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    appointment_id = Column(String(36), ForeignKey("patient_appointments.id", ondelete="CASCADE"), nullable=True)
+    patient_id = Column(String(36), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    note_text = Column(Text, nullable=False)
+    procedures = Column(JSONB, nullable=False, server_default="[]")
+    guidance = Column(JSONB, nullable=False, server_default="[]")
+    signed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    signature_hash = Column(String(128), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    addenda = relationship("ClinicalNoteAddendum", back_populates="note", cascade="all, delete-orphan")
+    __table_args__ = (
+        Index("idx_clinical_notes_clinic_patient", "clinic_id", "patient_id", "created_at"),
+    )
+
+
+class ClinicalNoteAddendum(Base):
+    __tablename__ = "clinical_note_addenda"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    note_id = Column(String(36), ForeignKey("clinical_notes.id", ondelete="CASCADE"), nullable=False)
+    author_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    version = Column(Integer, nullable=False)
+    reason = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    note = relationship("ClinicalNote", back_populates="addenda")
+    __table_args__ = (
+        UniqueConstraint("note_id", "version", name="uq_clinical_note_addenda_version"),
+    )
+
+
+class ClinicalAttachment(Base):
+    __tablename__ = "clinical_attachments"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    note_id = Column(String(36), ForeignKey("clinical_notes.id", ondelete="CASCADE"), nullable=True)
+    patient_id = Column(String(36), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    object_key = Column(String(512), nullable=False)
+    mime_type = Column(String(120), nullable=False)
+    size_bytes = Column(BigInteger, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_clinical_attachments_clinic_patient", "clinic_id", "patient_id", "created_at"),
+    )
+
+
+class SatisfactionSurvey(Base):
+    __tablename__ = "satisfaction_surveys"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    appointment_id = Column(String(36), ForeignKey("patient_appointments.id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    professional_id = Column(Integer, ForeignKey("professionals.id", ondelete="RESTRICT"), nullable=False)
+    nps_score = Column(Integer, nullable=True)
+    procedure_score = Column(Integer, nullable=True)
+    comment = Column(Text, nullable=True)
+    channel = Column(String(30), nullable=False, server_default=text("'whatsapp'"))
+    status = Column(String(20), nullable=False, server_default=text("'sent'"))
+    sent_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    responded_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("appointment_id", name="uq_satisfaction_surveys_appointment"),
+        CheckConstraint("nps_score IS NULL OR (nps_score BETWEEN 0 AND 10)", name="ck_satisfaction_nps"),
+        CheckConstraint("procedure_score IS NULL OR (procedure_score BETWEEN 1 AND 5)", name="ck_satisfaction_procedure"),
+    )
+
+
+class PatientTimelineEvent(Base):
+    __tablename__ = "patient_timeline_events"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(String(60), nullable=False)
+    payload = Column(JSONB, nullable=False, server_default="{}")
+    occurred_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        Index("idx_patient_timeline_clinic_patient", "clinic_id", "patient_id", "occurred_at"),
+    )
+
+
+class ModuleSetting(Base):
+    __tablename__ = "patient_record_module_settings"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, unique=True)
+    noshow_minutes = Column(Integer, nullable=False, server_default=text("30"))
+    recurrence_window_days = Column(Integer, nullable=False, server_default=text("90"))
+    survey_delay_hours = Column(Integer, nullable=False, server_default=text("2"))
+    survey_expiration_hours = Column(Integer, nullable=False, server_default=text("72"))
+    inactive_months = Column(Integer, nullable=False, server_default=text("6"))
+    google_review_enabled = Column(Boolean, nullable=False, server_default=text("false"))
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class RecurrenceConflictTask(Base):
+    __tablename__ = "recurrence_conflict_tasks"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    clinic_id = Column(BigInteger, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    patient_id = Column(String(36), ForeignKey("patients.id", ondelete="CASCADE"), nullable=False)
+    appointment_id = Column(String(36), ForeignKey("patient_appointments.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String(20), nullable=False, server_default=text("'pending'"))
+    title = Column(String(255), nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class PlatformSetting(Base):
