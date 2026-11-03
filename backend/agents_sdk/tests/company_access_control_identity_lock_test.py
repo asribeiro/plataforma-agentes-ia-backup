@@ -134,6 +134,16 @@ def test_capacity_reserves_headroom_and_rejects_before_pool_checkout(monkeypatch
     assert guard.local_lock_count == 0
 
 
+def test_capacity_floor_preserves_one_slot_when_headroom_eats_all_pool_budget():
+    capacity = access_control._calculate_identity_operation_capacity(
+        pool_capacity=20,
+        pool_headroom=20,
+        configured_max=4,
+        connections_per_operation=2,
+    )
+    assert capacity == 1
+
+
 def test_external_advisory_lock_contention_is_fail_fast(monkeypatch):
     guard = _install_guard(monkeypatch, capacity_limit=1)
     bind = FakePostgresBind(try_lock_results=[False])

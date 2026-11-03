@@ -1,7 +1,7 @@
 // src/App.tsx
 
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { ThemeProvider } from './contexts/ThemeContext.tsx';
 import Login from './pages/Login.tsx';
 import ResetPassword from './pages/ResetPassword.tsx';
@@ -40,6 +40,8 @@ import Procedimentos from './pages/Procedimentos.tsx';
 import Profissionais from './pages/Profissionais.tsx';
 import Equipe from './pages/Equipe.tsx';
 import Plataforma from './pages/Plataforma.tsx';
+import PatientRecordPage, { TreatmentManager } from './pages/PatientRecordPage.tsx';
+import PatientJourneyPage from './pages/PatientJourneyPage.tsx';
 
 const AgendaIntegrationRedirect: React.FC = () => {
   const location = useLocation();
@@ -83,6 +85,12 @@ const App: React.FC = () => {
                   <Route path="/customers/invoices" element={<CustomerManagement />} />
                   <Route path="/customers/plans" element={<CustomerManagement />} />
                   <Route path="/customers/revenue" element={<CustomerManagement />} />
+
+                  {/* Prontuário e jornada do paciente */}
+                  <Route path="/prontuario/pacientes" element={<PatientRecordPage />} />
+                  <Route path="/prontuario/pacientes/:patientId/tratamentos" element={<TreatmentManagerWrapper />} />
+                  <Route path="/prontuario/pacientes/:patientId" element={<PatientRecordPage />} />
+                  <Route path="/prontuario/jornada" element={<PatientJourneyPage />} />
 
                   {/* Automação centralizada */}
                   <Route path="/follow-up/*" element={<Navigate to="/flows" replace />} />
@@ -144,3 +152,8 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+const TreatmentManagerWrapper: React.FC = () => {
+  const { patientId } = useParams();
+  return patientId ? <TreatmentManager patientId={patientId} /> : <Navigate to="/prontuario/pacientes" replace />;
+};
