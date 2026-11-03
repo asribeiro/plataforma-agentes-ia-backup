@@ -1,11 +1,26 @@
-# Stack isolada da plataforma. Uso:
-#   docker compose --env-file .env.docker up -d --build
-name: plataforma-agentes
+# Stack da plataforma de agentes — um arquivo, três ambientes.
+#
+# O que diferencia dev, homolog e produção NÃO está neste arquivo: vem do env-file.
+#   produção   docker compose --env-file deploy/environments/prod.env up -d --build
+#   homolog    docker compose --env-file deploy/environments/homolog.env up -d
+#   dev        docker compose --env-file deploy/environments/dev.env up -d
+#
+# Todo default aqui reproduz a produção atual: projeto `plataforma-agentes`, web 127.0.0.1:8083,
+# api 127.0.0.1:8002, banco `plataforma_agentes`, rede `plataforma-agentes-net`, volumes
+# `plataforma-agentes_*`. Subir sem env-file continua fazendo exatamente o que fazia antes.
+#
+# A borda TLS (80/443) NÃO é deste compose: é uma stack separada em /opt/borda, que serve os três
+# ambientes por hostname e é a única dona das portas 80/443 do host. Por isso o `edge` daqui vive no
+# profile `edge-local` e não sobe no `up` normal — subir os dois brigaria pela 443.
+name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}
 
 x-backend: &backend
   build:
     context: .
     dockerfile: Dockerfile.backend
+  # Uma imagem nomeada POR AMBIENTE (APP_IMAGE). Sem isso, um build em dev sobrescreveria a imagem
+  # que produção usa — e o "passou em homolog, quebrou em prod" voltaria pela porta dos fundos.
+  image: ${APP_IMAGE:-plataforma-agentes-backend:local}
   env_file: [.env.backend]
   restart: unless-stopped
   networks: [internal]
@@ -16,28 +31,12 @@ x-backend: &backend
     redis: {condition: service_healthy}
 
 services:
-  edge:
-    image: caddy:2-alpine
-    container_name: plataforma-agentes-edge
-    restart: unless-stopped
-    networks: [internal]
-    ports:
-      - "${EDGE_HTTP_BIND_HOST:-0.0.0.0}:${EDGE_HTTP_PORT:-80}:80"
-      - "${EDGE_HTTPS_BIND_HOST:-0.0.0.0}:${EDGE_HTTPS_PORT:-443}:443"
-    environment:
-      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?defina PUBLIC_DOMAIN em .env.docker}
-      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL em .env.docker}
-    volumes:
-      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on: [web]
-
   web:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    container_name: plataforma-agentes-web
+    image: ${WEB_IMAGE:-plataforma-agentes-web:local}
+    container_name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-web
     restart: unless-stopped
     networks: [internal]
     ports:
@@ -46,42 +45,45 @@ services:
 
   api:
     <<: *backend
-    container_name: plataforma-agentes-api
+    container_name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-api
     ports:
       - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8002}:8002"
 
   worker:
     <<: *backend
-    container_name: plataforma-agentes-worker
+    container_name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-worker
     command: >
-      celery -A backend.worker.celery_app:app worker --loglevel=INFO --concurrency=2
+      celery -A backend.worker.celery_app:app worker --loglevel=INFO --concurrency=${WORKER_CONCURRENCY:-2}
       -Q messages_queue,waha_messages_queue,confirmation_queue,scheduling_queue,followup_queue,noshow_queue,pos_consulta_queue,pos_venda_queue,reminders_queue,scheduled_messages_queue,nutrition_campaign_queue,agents_sdk_queue,flow_execution_queue,whatsapp_campaign_queue
 
   beat:
     <<: *backend
-    container_name: plataforma-agentes-beat
+    container_name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-beat
     command: celery -A backend.worker.celery_app:app beat --loglevel=INFO --schedule /data/celerybeat-schedule
 
   postgres:
     image: postgres:15-alpine
-    container_name: plataforma-agentes-postgres
+    container_name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: plataforma_agentes
-      POSTGRES_USER: plataforma_agentes
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD em .env.docker}
+      POSTGRES_DB: ${POSTGRES_DB:-plataforma_agentes}
+      POSTGRES_USER: ${POSTGRES_USER:-plataforma_agentes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no env-file do ambiente}
     networks: [internal]
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U plataforma_agentes -d plataforma_agentes"]
+      # $${…} escapa a interpolação do Compose: quem expande é o shell de dentro do container.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 10
+    # Sem `ports:` de propósito — banco não fica exposto no host em nenhum ambiente.
+    # Inspeção é `docker exec … psql`, nunca porta aberta em 0.0.0.0.
 
   redis:
     image: redis:7-alpine
-    container_name: plataforma-agentes-redis
+    container_name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     networks: [internal]
@@ -93,13 +95,40 @@ services:
       timeout: 5s
       retries: 10
 
+  # Caddy local — não é a borda pública. Existe só para quem quiser subir um ambiente 100% isolado
+  # do proxy do host (ex.: testar TLS próprio). Fora do `up` normal, por profile.
+  edge:
+    profiles: ["edge-local"]
+    image: caddy:2-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-edge
+    restart: unless-stopped
+    networks: [internal]
+    ports:
+      - "${EDGE_HTTP_BIND_HOST:-0.0.0.0}:${EDGE_HTTP_PORT:-8080}:80"
+      - "${EDGE_HTTPS_BIND_HOST:-0.0.0.0}:${EDGE_HTTPS_PORT:-8443}:443"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-dev@localhost}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web]
+
 networks:
   internal:
-    name: plataforma-agentes-net
+    name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}-net
 
+# Nomes explícitos para o volume não depender do nome do projeto: em produção o volume real é
+# `plataforma-agentes_postgres_data` e é para ele que este default precisa continuar apontando.
 volumes:
   postgres_data:
+    name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}_postgres_data
   redis_data:
+    name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}_redis_data
   app_data:
+    name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}_app_data
   caddy_data:
+    name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}_caddy_data
   caddy_config:
+    name: ${COMPOSE_PROJECT_NAME:-plataforma-agentes}_caddy_config
