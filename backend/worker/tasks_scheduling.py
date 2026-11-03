@@ -29,6 +29,8 @@ def update_one_company_availabilities(company_id: int):
     Esta versão utiliza uma abordagem de "atualização atômica" para evitar
     perda de dados durante a atualização.
     """
+    from backend.db import definir_contexto_clinico
+    definir_contexto_clinico(company_id)  # RLS: tenant desta task
     db = SessionLocal()
     try:
         logger.info(f"[update_one_company_availabilities] Iniciando atualização para company_id={company_id}")

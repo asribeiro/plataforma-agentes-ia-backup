@@ -438,6 +438,8 @@ def enviar_passo_noshow(
     """Task que envia mensagens de no-show e agenda próximos passos,
        agora registrando execuções em noshow_follow_up_executions.
     """
+    from backend.db import definir_contexto_clinico
+    definir_contexto_clinico(company_id)  # RLS: tenant desta task
     db = SessionLocal()
     try:
         from backend.services.company_access_control import validate_company_job_epoch

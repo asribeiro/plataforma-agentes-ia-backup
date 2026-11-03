@@ -41,7 +41,10 @@ def check_and_schedule_reminders():
 
             logger.info(f"Encontradas {len(tasks)} tarefas para verificar lembretes")
 
+            from backend.db import definir_contexto_clinico
+
             for task in tasks:
+                definir_contexto_clinico(task.company_id)  # RLS: tenant da tarefa
                 # Calcular quando o lembrete deve ser enviado
                 reminder_time = task.scheduled_for - timedelta(minutes=task.reminder_minutes)
 

@@ -107,6 +107,10 @@ def enviar_mensagem_agendada(task_id: int):
             logger.error(f"[SCHED_MSG] Task {task_id} não encontrada")
             return
 
+        from backend.db import definir_contexto_clinico
+
+        definir_contexto_clinico(task.company_id)  # RLS: tenant do lembrete
+
         if task.status != 'pending':
             logger.info(f"[SCHED_MSG] Task {task_id} já processada ou cancelada. Status: {task.status}")
             return

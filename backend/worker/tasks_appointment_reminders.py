@@ -92,7 +92,10 @@ def enviar_lembretes_vencidos() -> str:
 
             from backend.worker.tasks_scheduled_messages import enviar_mensagem_agendada
 
+            from backend.db import definir_contexto_clinico
+
             for tarefa in tarefas:
+                definir_contexto_clinico(tarefa.company_id)  # RLS: tenant do lembrete
                 if not tarefa.message_content:
                     tarefa.message_content = _texto_do_lembrete(tarefa)
                     tarefa.message_type = tarefa.message_type or "text"
