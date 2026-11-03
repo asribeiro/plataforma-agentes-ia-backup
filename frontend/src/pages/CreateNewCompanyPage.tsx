@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Building2, CheckCircle2, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Building2, CheckCircle2, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext.tsx';
 import {
@@ -15,6 +15,7 @@ import {
   companyRegistrationApi,
   type CompanyRegistrationPayload,
 } from '../services/companyRegistrationApi.ts';
+import { mensagemDeErro } from '../services/adminPlataformaApi.ts';
 
 const initialPayload: CompanyRegistrationPayload = {
   person_type: 'PJ',
@@ -55,6 +56,21 @@ const formatPhone = (value: string) => {
     ? digits.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')
     : digits.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
 };
+
+const normalizePayload = (payload: CompanyRegistrationPayload): CompanyRegistrationPayload => ({
+  ...payload,
+  administrative_responsible_email: payload.administrative_responsible_email || '',
+  administrative_responsible_name: payload.administrative_responsible_name || '',
+  administrative_responsible_phone: payload.administrative_responsible_phone || '',
+  accepted_insurance: payload.accepted_insurance || [],
+  business_hours: payload.business_hours || {},
+});
+
+const payloadForSubmit = (payload: CompanyRegistrationPayload): CompanyRegistrationPayload => ({
+  ...payload,
+  document: payload.document.replace(/\D/g, ''),
+  postal_code: payload.postal_code?.replace(/\D/g, ''),
+});
 
 const Field = ({ label, children, required = false }: { label: string; children: React.ReactNode; required?: boolean }) => {
   const { isDark } = useTheme();
@@ -101,9 +117,9 @@ const NewCompanyAdminPage: React.FC = () => {
     if (!editingCurrentCompany) return;
     setLoading(true);
     companyRegistrationApi.getCurrent()
-      .then((current) => setPayload(current))
+      .then((current) => setPayload(normalizePayload(current)))
       .catch((requestError: any) => {
-        setError(requestError.response?.data?.detail || 'Não foi possível carregar o cadastro da empresa.');
+        setError(mensagemDeErro(requestError));
       })
       .finally(() => setLoading(false));
   }, [editingCurrentCompany]);
@@ -114,10 +130,10 @@ const NewCompanyAdminPage: React.FC = () => {
     companyRegistrationApi.getDraft(requestedDraftId)
       .then((draft) => {
         setDraftId(draft.id);
-        setPayload(draft.payload);
+        setPayload(normalizePayload(draft.payload));
       })
       .catch((requestError: any) => {
-        setError(requestError.response?.data?.detail || 'Não foi possível carregar o rascunho.');
+        setError(mensagemDeErro(requestError));
       })
       .finally(() => setLoading(false));
   }, [requestedDraftId]);
@@ -144,15 +160,15 @@ const NewCompanyAdminPage: React.FC = () => {
     setLoading(true);
     try {
       const draft = draftId
-        ? await companyRegistrationApi.updateDraft(draftId, payload)
-        : await companyRegistrationApi.createDraft(payload);
+        ? await companyRegistrationApi.updateDraft(draftId, payloadForSubmit(payload))
+        : await companyRegistrationApi.createDraft(payloadForSubmit(payload));
       setDraftId(draft.id);
       if (logoFile) {
         await companyRegistrationApi.uploadDraftLogo(draft.id, logoFile);
       }
       setSuccess(`Rascunho #${draft.id} salvo. Ele ficará disponível para os administradores da plataforma.`);
     } catch (requestError: any) {
-      setError(requestError.response?.data?.detail || 'Não foi possível salvar o rascunho.');
+      setError(mensagemDeErro(requestError));
     } finally {
       setLoading(false);
     }
@@ -167,10 +183,10 @@ const NewCompanyAdminPage: React.FC = () => {
     }
     setLoading(true);
     try {
-      await companyRegistrationApi.updateCurrent(payload);
+      await companyRegistrationApi.updateCurrent(payloadForSubmit(payload));
       setSuccess('Cadastro completo da empresa atualizado com sucesso.');
     } catch (requestError: any) {
-      setError(requestError.response?.data?.detail || 'Não foi possível atualizar o cadastro da empresa.');
+      setError(mensagemDeErro(requestError));
     } finally {
       setLoading(false);
     }
@@ -186,8 +202,8 @@ const NewCompanyAdminPage: React.FC = () => {
     setLoading(true);
     try {
       const draft = draftId
-        ? await companyRegistrationApi.updateDraft(draftId, payload)
-        : await companyRegistrationApi.createDraft(payload);
+        ? await companyRegistrationApi.updateDraft(draftId, payloadForSubmit(payload))
+        : await companyRegistrationApi.createDraft(payloadForSubmit(payload));
       setDraftId(draft.id);
       if (logoFile) {
         await companyRegistrationApi.uploadDraftLogo(draft.id, logoFile);
@@ -195,7 +211,7 @@ const NewCompanyAdminPage: React.FC = () => {
       const result = await companyRegistrationApi.createCompany(draft.id);
       setSuccess(`${result.message} Convite pendente de envio ao responsável administrativo.`);
     } catch (requestError: any) {
-      setError(requestError.response?.data?.detail || 'Não foi possível criar a empresa.');
+      setError(mensagemDeErro(requestError));
     } finally {
       setLoading(false);
     }
@@ -297,7 +313,47 @@ const NewCompanyAdminPage: React.FC = () => {
             <Section title="4. Atendimento e convênios">
               <Field label="WhatsApp da secretária IA"><input className={agentiveInputClass(isDark)} value={formatPhone(payload.ai_whatsapp || '')} onChange={(e) => update('ai_whatsapp', e.target.value)} /></Field>
               <Field label="Atende convênios?"><select className={agentiveInputClass(isDark)} value={payload.accepts_insurance ? 'yes' : 'no'} onChange={(e) => update('accepts_insurance', e.target.value === 'yes')}><option value="no">Não</option><option value="yes">Sim</option></select></Field>
-              {payload.accepts_insurance && <Field label="Convênios aceitos"><input className={agentiveInputClass(isDark)} placeholder="Unimed, Bradesco..." value={payload.accepted_insurance.join(', ')} onChange={(e) => update('accepted_insurance', e.target.value.split(',').map((item) => item.trim()).filter(Boolean))} /></Field>}
+              {payload.accepts_insurance && (
+                <div className="md:col-span-2">
+                  <div className="mb-1 flex items-center justify-between gap-3">
+                    <span className={agentiveLabelClass(isDark)}>Convênios aceitos</span>
+                    <button
+                      type="button"
+                      onClick={() => update('accepted_insurance', [...payload.accepted_insurance, ''])}
+                      className={agentiveSecondaryButtonClass(isDark, 'px-2 py-1 text-xs')}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Adicionar convênio
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {(payload.accepted_insurance.length > 0 ? payload.accepted_insurance : ['']).map((insurance, index) => (
+                      <div key={`insurance-${index}`} className="flex items-center gap-2">
+                        <input
+                          className={agentiveInputClass(isDark)}
+                          placeholder="Nome do convênio"
+                          value={insurance}
+                          onChange={(event) => {
+                            const acceptedInsurance = [...payload.accepted_insurance];
+                            if (acceptedInsurance.length === 0) acceptedInsurance.push('');
+                            acceptedInsurance[index] = event.target.value;
+                            update('accepted_insurance', acceptedInsurance);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => update('accepted_insurance', payload.accepted_insurance.filter((_, itemIndex) => itemIndex !== index))}
+                          disabled={payload.accepted_insurance.length <= 1}
+                          aria-label={`Remover convênio ${index + 1}`}
+                          className={agentiveSecondaryButtonClass(isDark, 'shrink-0 px-2 py-2')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Section>
 
             <Section title="5. Plano e cobrança">

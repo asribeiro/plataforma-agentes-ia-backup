@@ -59,9 +59,9 @@ class CompanyRegistrationPayload(BaseModel):
     fixed_phone: Optional[str] = Field(default=None, max_length=30)
     website: Optional[str] = Field(default=None, max_length=255)
     instagram: Optional[str] = Field(default=None, max_length=255)
-    administrative_responsible_name: str = Field(min_length=1, max_length=255)
-    administrative_responsible_email: EmailStr
-    administrative_responsible_phone: str = Field(min_length=8, max_length=30)
+    administrative_responsible_name: str = Field(default="", max_length=255)
+    administrative_responsible_email: Optional[EmailStr] = None
+    administrative_responsible_phone: str = Field(default="", max_length=30)
     technical_responsible_professional_id: Optional[int] = None
     technical_responsible_cro: Optional[str] = Field(default=None, max_length=30)
     technical_responsible_cro_uf: Optional[str] = Field(default=None, min_length=2, max_length=2)
@@ -84,6 +84,13 @@ class CompanyRegistrationPayload(BaseModel):
         if len(digits) not in {11, 14}:
             raise ValueError("Informe um CPF ou CNPJ válido")
         return digits
+
+    @field_validator("postal_code", mode="before")
+    @classmethod
+    def normalize_postal_code(cls, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return value
+        return "".join(char for char in str(value) if char.isdigit())[:8]
 
     @field_validator("state", "technical_responsible_cro_uf", mode="before")
     @classmethod
@@ -143,7 +150,7 @@ def _company_payload(company: Company) -> dict[str, Any]:
         "website": company.website,
         "instagram": company.instagram,
         "administrative_responsible_name": company.administrative_responsible_name or "",
-        "administrative_responsible_email": company.administrative_responsible_email or "",
+        "administrative_responsible_email": company.administrative_responsible_email or None,
         "administrative_responsible_phone": company.administrative_responsible_phone or "",
         "technical_responsible_professional_id": company.technical_responsible_professional_id,
         "technical_responsible_cro": company.technical_responsible_cro,
@@ -155,7 +162,12 @@ def _company_payload(company: Company) -> dict[str, Any]:
         "plan": "redes_clinicas" if company.professional_tier == "network" else "consultorio",
         "billing_interval": company.billing_interval or "monthly",
         "is_founder_customer": bool(company.is_founder_customer),
-        "trial_days": 0,
+        "trial_days": int((company.settings or {}).get("registration_trial_days", 0)),
+        "start_date": (
+            company.registration_started_at.date().isoformat()
+            if company.registration_started_at
+            else None
+        ),
         "billing_email": company.billing_email,
         "preferred_payment_method": company.preferred_payment_method,
     }
@@ -180,6 +192,7 @@ def update_current_registration(
     user=Depends(get_current_user),
 ):
     _require_company_admin(user)
+    _require_complete_payload(payload)
     company = db.query(Company).filter(Company.id == getattr(user, "company_id", None)).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
@@ -213,7 +226,11 @@ def update_current_registration(
         "accepted_insurance": payload.accepted_insurance,
         "business_hours": payload.business_hours,
         "administrative_responsible_name": payload.administrative_responsible_name,
-        "administrative_responsible_email": str(payload.administrative_responsible_email),
+        "administrative_responsible_email": (
+            str(payload.administrative_responsible_email)
+            if payload.administrative_responsible_email
+            else None
+        ),
         "administrative_responsible_phone": payload.administrative_responsible_phone,
         "technical_responsible_professional_id": payload.technical_responsible_professional_id,
         "technical_responsible_cro": payload.technical_responsible_cro,
@@ -226,6 +243,11 @@ def update_current_registration(
         "max_professionals": max_professionals,
     }.items():
         setattr(company, field, value)
+    company.registration_started_at = _parse_start_date(payload.start_date)
+    company.settings = {
+        **(company.settings or {}),
+        "registration_trial_days": payload.trial_days,
+    }
     actor_client_id, actor_user_id = _actor_ids(user)
     db.add(CompanyAuditEvent(
         company_id=company.id,
@@ -244,6 +266,38 @@ def _actor_ids(user) -> tuple[Optional[int], Optional[int]]:
     if isinstance(user, Client):
         return int(user.id), None
     return getattr(user, "client_id", None), int(user.id) if isinstance(user, User) else None
+
+
+def _require_complete_payload(payload: CompanyRegistrationPayload) -> None:
+    missing = []
+    if not payload.legal_name.strip():
+        missing.append("legal_name")
+    if not payload.trade_name.strip():
+        missing.append("trade_name")
+    if not payload.city or not payload.city.strip():
+        missing.append("city")
+    if not payload.state or not payload.state.strip():
+        missing.append("state")
+    if not payload.administrative_responsible_name.strip():
+        missing.append("administrative_responsible_name")
+    if not payload.administrative_responsible_email:
+        missing.append("administrative_responsible_email")
+    if len("".join(char for char in payload.administrative_responsible_phone if char.isdigit())) < 10:
+        missing.append("administrative_responsible_phone")
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Preencha os campos obrigatórios: {', '.join(missing)}",
+        )
+
+
+def _parse_start_date(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Data de início inválida") from exc
 
 
 def _draft_output(draft: CompanyRegistrationDraft) -> DraftOut:
@@ -381,6 +435,7 @@ def create_company_from_draft(
     if not draft or draft.status != "draft":
         raise HTTPException(status_code=404, detail="Rascunho ativo não encontrado")
     payload = CompanyRegistrationPayload.model_validate(draft.payload or {})
+    _require_complete_payload(payload)
     document = payload.document
     if db.query(Company).filter(Company.cnpj == document).first():
         raise HTTPException(status_code=409, detail="CPF/CNPJ já está em uso")

@@ -10,7 +10,7 @@ import {
   Mail,
   ShieldCheck,
 } from 'lucide-react';
-import { login } from '../services/api.ts';
+import { clearAuthStorage, login } from '../services/api.ts';
 import { branding } from '../config/branding.ts';
 
 const inputClass = [
@@ -43,6 +43,7 @@ const Login = () => {
     setIsLoading(true);
 
     try {
+      clearAuthStorage();
       const {
         companyId,
         clientId,
@@ -62,6 +63,9 @@ const Login = () => {
         localStorage.setItem('company_id', id);
         localStorage.setItem('clinic_id', id);
       }
+      localStorage.removeItem('clinic_role');
+      localStorage.removeItem('clinic_pode_administrar_usuarios');
+      localStorage.removeItem('clinic_ve_prontuario');
       if (userTeam) {
         localStorage.setItem('user_team', userTeam);
       } else {
@@ -89,17 +93,7 @@ const Login = () => {
     } catch (err: any) {
       console.error('Erro completo:', err);
       setError(err.message || 'Falha ao fazer login');
-
-      localStorage.removeItem('user_type');
-      localStorage.removeItem('user_team');
-      localStorage.removeItem('user_team_data');
-      localStorage.removeItem('sidebar_permissions');
-      localStorage.removeItem('contact_permissions');
-      localStorage.removeItem('user_id');
-      localStorage.removeItem('client_id');
-      localStorage.removeItem('master_client_id');
-      localStorage.removeItem('company_id');
-      localStorage.removeItem('clinic_id');
+      clearAuthStorage();
     } finally {
       setIsLoading(false);
     }

@@ -18,6 +18,7 @@ import {
   Users,
   UserRound,
   Webhook,
+  Stethoscope,
   type LucideIcon,
 } from 'lucide-react';
 import WhatsAppIcon from '../components/icons/WhatsAppIcon.tsx';
@@ -110,6 +111,17 @@ export const SIDEBAR_MODULE_MENUS: Record<ModuleKey, MenuItem[]> = {
     },
     { path: '/chat', label: 'Chat Ao Vivo', icon: MessageSquare, permission: 'chat' },
     { path: '/calendar-config', label: 'Agenda', icon: Calendar, permission: 'company' },
+    {
+      path: '/prontuario/pacientes',
+      label: 'Prontuário',
+      icon: Stethoscope,
+      permission: 'company',
+      isNew: true,
+      subItems: [
+        { path: '/prontuario/pacientes', label: 'Pacientes', permission: 'company' },
+        { path: '/prontuario/jornada', label: 'Jornada e satisfação', permission: 'company' },
+      ],
+    },
     // Cadastro da clinica (F1-09). Sem item de menu as telas existiriam e
     // ninguem chegaria nelas — so por URL direta. Mesma permissao de Agenda
     // ('company'), que o usuario da clinica ja tem: nao amplia acesso.
