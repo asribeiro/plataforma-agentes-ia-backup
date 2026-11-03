@@ -52,6 +52,13 @@ from backend.routes.integrations.calendar_integration import router as calendar_
 from backend.routes.integrations.support_group_integration import router as support_group_router
 from backend.routes.integrations.telegram_integration import router as telegram_integration_router
 from backend.routes import agendamento_routes
+from backend.routes import patient_record_routes
+from backend.routes import clinical_record_routes
+from backend.routes import treatment_routes
+from backend.routes import recurrence_routes
+from backend.routes import journey_routes
+from backend.routes import satisfaction_routes
+from backend.routes import clinical_attachment_routes
 from backend.routes import arquivos, waha_media
 from backend.routes import followups
 from backend.ws_manager import start_manager, stop_manager
@@ -389,6 +396,13 @@ app.include_router(calendar_router, prefix="/api/integrations/calendar", tags=["
 app.include_router(support_group_router, prefix="/api/integrations/support-group", tags=["support_group_integration"])
 app.include_router(telegram_integration_router, prefix="/api/integrations/telegram", tags=["telegram_integration"])
 app.include_router(agendamento_routes.router, prefix="/api/agenda")
+app.include_router(patient_record_routes.router)
+app.include_router(clinical_record_routes.router)
+app.include_router(treatment_routes.router)
+app.include_router(recurrence_routes.router)
+app.include_router(journey_routes.router)
+app.include_router(satisfaction_routes.router)
+app.include_router(clinical_attachment_routes.router)
 app.include_router(arquivos.router, prefix="/api/arquivos", tags=["arquivos"])
 app.include_router(waha_media.router, prefix="/api/waha", tags=["waha-media"])
 app.include_router(followups.router, prefix="/api", tags=["followups"])

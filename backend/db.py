@@ -1,9 +1,16 @@
 import os
 import logging
 from sqlalchemy import create_engine, event, text
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
 from sqlalchemy.orm import Session, sessionmaker, declarative_base
 from sqlalchemy.pool import Pool
 from typing import Generator
+
+# SQLite used in tests and local development cannot compile PostgreSQL's JSONB
+# type natively. Map it to JSON so table creation and validation pass while
+# keeping the real PostgreSQL schema unchanged in production.
+if not hasattr(SQLiteTypeCompiler, "visit_JSONB"):
+    SQLiteTypeCompiler.visit_JSONB = lambda self, type_, **kw: "JSON"
 
 # URL de conexão (obrigatório usar variável de ambiente)
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -38,29 +45,43 @@ elif "sqlite" in DATABASE_URL:
         "check_same_thread": False
     }
 
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=POOL_SIZE,
-    max_overflow=MAX_OVERFLOW,
-    pool_timeout=POOL_TIMEOUT,
-    pool_recycle=POOL_RECYCLE,
-    pool_pre_ping=True,      # ping antes de usar
-    connect_args=connect_args
-)
+engine_options = {
+    "pool_pre_ping": True,
+    "connect_args": connect_args,
+}
+if "sqlite" not in DATABASE_URL:
+    engine_options.update(
+        pool_size=POOL_SIZE,
+        max_overflow=MAX_OVERFLOW,
+        pool_timeout=POOL_TIMEOUT,
+        pool_recycle=POOL_RECYCLE,
+    )
+
+engine = create_engine(DATABASE_URL, **engine_options)
 
 logger = logging.getLogger(__name__)
+
+
+def _pool_metric(name: str):
+    value = getattr(engine.pool, name, 0)
+    return value() if callable(value) else value
+
 
 # Event listeners para monitorar conexões
 @event.listens_for(Pool, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     """Evento disparado quando uma nova conexão é criada"""
-    logger.debug(f"Nova conexão criada. Pool size: {engine.pool.size()}, checked out: {engine.pool.checkedout()}")
+    logger.debug(
+        "Nova conexão criada. Pool size: %s, checked out: %s",
+        _pool_metric("size"),
+        _pool_metric("checkedout"),
+    )
 
 @event.listens_for(Pool, "checkout")
 def receive_checkout(dbapi_connection, connection_record, connection_proxy):
     """Evento disparado quando uma conexão é retirada do pool"""
-    checked_out = engine.pool.checkedout()
-    pool_size = engine.pool.size()
+    checked_out = _pool_metric("checkedout")
+    pool_size = _pool_metric("size")
     logger.debug(f"Conexão retirada do pool. Pool: {pool_size}, checked out: {checked_out}")
 
     # Alerta se estivermos próximo do limite
@@ -71,15 +92,19 @@ def receive_checkout(dbapi_connection, connection_record, connection_proxy):
 @event.listens_for(Pool, "checkin")
 def receive_checkin(dbapi_connection, connection_record):
     """Evento disparado quando uma conexão é devolvida ao pool"""
-    logger.debug(f"Conexão devolvida ao pool. Pool size: {engine.pool.size()}, checked out: {engine.pool.checkedout()}")
+    logger.debug(
+        "Conexão devolvida ao pool. Pool size: %s, checked out: %s",
+        _pool_metric("size"),
+        _pool_metric("checkedout"),
+    )
 
 def get_connection_stats():
     """Retorna estatísticas do pool de conexões"""
     return {
-        "pool_size": engine.pool.size(),
-        "checked_out": engine.pool.checkedout(),
-        "overflow": engine.pool.overflow(),
-        "checked_in": engine.pool.checkedin(),
+        "pool_size": _pool_metric("size"),
+        "checked_out": _pool_metric("checkedout"),
+        "overflow": _pool_metric("overflow"),
+        "checked_in": _pool_metric("checkedin"),
         "max_overflow": MAX_OVERFLOW,
         "total_capacity": POOL_SIZE + MAX_OVERFLOW
     }
@@ -161,3 +186,25 @@ def get_db() -> Generator:
         yield db
     finally:
         db.close()
+
+
+def set_clinic_context(db: Session, clinic_id: int) -> None:
+    """Define o tenant da transação para as políticas RLS do prontuário.
+
+    O contexto é transacional (`set_config(..., true)`) e nunca fica preso à
+    conexão devolvida ao pool. Em SQLite, usado apenas por testes legados,
+    mantemos o valor na sessão sem emitir SQL específico do PostgreSQL.
+    """
+    try:
+        normalized_clinic_id = int(clinic_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("clinic_id deve ser um inteiro positivo") from exc
+    if normalized_clinic_id <= 0:
+        raise ValueError("clinic_id deve ser um inteiro positivo")
+
+    db.info["clinic_id"] = normalized_clinic_id
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(
+            text("SELECT set_config('app.clinic_id', :clinic_id, true)"),
+            {"clinic_id": str(normalized_clinic_id)},
+        )

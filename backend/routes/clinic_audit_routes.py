@@ -11,12 +11,13 @@ para auditar. So lista, e so dentro da propria empresa.
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.db import get_db
 from backend.services.papel_clinico import (
+    configurar_contexto_clinico,
     exigir_admin_de_usuarios,
     listar_acessos,
 )
@@ -48,8 +49,9 @@ def consultar(
     usuario=Depends(exigir_admin_de_usuarios),
 ):
     """Ultimos acessos a dado clinico da clinica do usuario logado."""
-    company_id = getattr(usuario, "company_id", None)
-    if not company_id:
+    try:
+        company_id = configurar_contexto_clinico(db, usuario)
+    except HTTPException:
         # Sem empresa nao existe recorte possivel: devolver tudo seria vazamento.
         return []
     return listar_acessos(

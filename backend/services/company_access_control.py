@@ -176,10 +176,18 @@ def _calculate_identity_operation_capacity(
         0,
         int(pool_capacity) - max(0, int(pool_headroom)),
     )
-    return min(
+    capacity = min(
         max(0, int(configured_max)),
         available_connections // connection_cost,
     )
+
+    # When the pool is intentionally small or the configured headroom is high,
+    # zero-capacity identity gates would block every login and account mutation.
+    # Keep one slot available so the app remains usable while still honoring the
+    # pool budget and the configured upper bound.
+    if capacity == 0 and int(pool_capacity) > 0 and int(configured_max) > 0:
+        return 1
+    return capacity
 
 
 _IDENTITY_OPERATION_POOL_CAPACITY = (

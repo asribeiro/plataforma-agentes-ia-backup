@@ -41,6 +41,7 @@ import {
   Building2,
   Calendar,
   CalendarCheck,
+  ClipboardPenLine,
   KeyRound,
   Layers,
   Loader2,
@@ -126,9 +127,10 @@ const formatarCnpj = (cnpj: string | null): string | null => {
 /**
  * Atalhos para as telas de configuração DAQUELE cliente.
  *
- * `destino` é a rota que a tela alvo já sabe abrir: `/company` mostra os dados
- * cadastrais (logo, nome de exibição), `/equipe` é onde se define papel, perfil
- * de permissão e vínculo, e `/company?tab=teams` abre a aba de perfis —
+ * `destino` é a rota que a tela alvo já sabe abrir: `/new-company-admin?mode=edit`
+ * mostra o cadastro completo, `/company` mostra os dados cadastrais básicos
+ * (logo, nome de exibição), `/equipe` é onde se define papel, perfil de
+ * permissão e vínculo, e `/company?tab=teams` abre a aba de perfis —
  * `CompanyConfig` lê `?tab=` na query string.
  *
  * Todas essas telas leem a empresa da SESSÃO, não um id na URL: por isso a ação
@@ -144,6 +146,12 @@ interface AcaoDaEmpresa {
 }
 
 const ACOES_DA_EMPRESA: AcaoDaEmpresa[] = [
+  {
+    destino: '/new-company-admin?mode=edit',
+    icone: ClipboardPenLine,
+    rotulo: 'Completar cadastro',
+    detalhe: 'Todos os dados cadastrais, responsáveis e cobrança',
+  },
   {
     destino: '/company',
     icone: Settings,
@@ -644,7 +652,8 @@ const Plataforma: React.FC = () => {
   /**
    * Clique na ação de configuração.
    *
-   * O destino (`/company`, `/equipe`, `/company?tab=teams`) lê a empresa da
+   * O destino (`/new-company-admin?mode=edit`, `/company`, `/equipe`,
+   * `/company?tab=teams`) lê a empresa da
    * SESSÃO e não tem id na URL. Então:
    *   - empresa já é a atual: nada a trocar, navega direto pelo router (o
    *     contexto no cliente e no servidor já bate);
