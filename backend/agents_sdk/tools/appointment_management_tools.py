@@ -90,6 +90,13 @@ def _cancelar_um_agendamento(db: Session, company_id: int, agendamento, motivo: 
         agendamento.google_sync_status = "CANCELLED"
         db.commit()
 
+    # Ponte com o prontuário: a consulta clínica também fica cancelada.
+    try:
+        from backend.services.prontuario_agenda_bridge import sincronizar_agendamento
+        sincronizar_agendamento(db, agendamento)
+    except Exception as ponte_erro:  # noqa: BLE001
+        logger.warning("[Cancelamento] ponte com o prontuário falhou: %s", ponte_erro)
+
     lembretes = _cancelar_tarefas_de_lembrete(db, company_id, agendamento.id)
     resultado["lembretes"] = lembretes.get("canceladas", 0)
     logger.info(

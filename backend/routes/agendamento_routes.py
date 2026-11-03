@@ -368,6 +368,14 @@ async def criar_agendamento(
         local_agn_id_inicial = novo_agendamento_inicial.id
         logger.info(f"[Criar Agendamento Rota] Agendamento local inicial criado. ID Local={local_agn_id_inicial} para company_id={company_id}")
 
+        # Ponte com o prontuário: o paciente e a consulta clínica passam a existir aqui também.
+        # Falha aqui NUNCA derruba o agendamento (o job de 5 min recupera depois).
+        try:
+            from backend.services.prontuario_agenda_bridge import sincronizar_agendamento
+            sincronizar_agendamento(db, novo_agendamento_inicial)
+        except Exception as ponte_erro:  # noqa: BLE001
+            logger.warning("[Criar Agendamento Rota] ponte com o prontuário falhou: %s", ponte_erro)
+
         # Variável para retornar o objeto final (pode ser atualizada pelo sync)
         agendamento_final = novo_agendamento_inicial
         id_final_para_task = local_agn_id_inicial
@@ -749,6 +757,13 @@ async def atualizar_agendamento(
         # Garante que estamos retornando o estado mais atualizado do agendamento
         # após todas as operações (refresh já feito após commit inicial e nos syncs)
         # db.refresh(agendamento) # Pode ser redundante, mas garante
+        # Ponte com o prontuário: reagendou -> move a consulta clínica; cancelou -> marca cancelada.
+        try:
+            from backend.services.prontuario_agenda_bridge import sincronizar_agendamento
+            sincronizar_agendamento(db, agendamento)
+        except Exception as ponte_erro:  # noqa: BLE001
+            logger.warning("[Atualizar Agendamento] ponte com o prontuário falhou: %s", ponte_erro)
+
         try:
             from backend.services.flow_event_service import trigger_appointment_event
             flow_event_name = None

@@ -2543,12 +2543,23 @@ class PatientAppointment(Base):
     source = Column(String(30), nullable=False)
     status = Column(String(30), nullable=False, server_default=text("'scheduled'"))
     cancellation_reason = Column(Text, nullable=True)
+    # Ponte com a agenda operacional: qual linha de `agendamentos` gerou esta consulta clínica.
+    agendamento_id = Column(
+        Integer, ForeignKey("agendamentos.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
         Index("idx_patient_appointments_clinic_start", "clinic_id", "starts_at"),
         Index("idx_patient_appointments_clinic_status", "clinic_id", "status"),
+        # Ponte com a agenda: um agendamento gera no máximo uma consulta clínica.
+        Index(
+            "uq_patient_appointments_agendamento",
+            "clinic_id",
+            "agendamento_id",
+            unique=True,
+        ),
     )
 
 

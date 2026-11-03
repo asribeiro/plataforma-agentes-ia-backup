@@ -603,6 +603,13 @@ def create_calendar_scheduling_tools(
             db.commit()
             db.refresh(appointment)
 
+            # Ponte com o prontuário clínico: paciente + consulta criados aqui também.
+            try:
+                from backend.services.prontuario_agenda_bridge import sincronizar_agendamento
+                sincronizar_agendamento(db, appointment)
+            except Exception as ponte_erro:  # noqa: BLE001
+                logger.warning("[create_lead_appointment] ponte com o prontuário falhou: %s", ponte_erro)
+
             google_sync_status = _sync_google_calendar_if_available(
                 db,
                 appointment,

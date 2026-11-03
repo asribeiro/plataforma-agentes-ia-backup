@@ -212,6 +212,12 @@ app.conf.update(
 
 # Exemplo de agendamento Celery Beat: atualiza todas as empresas a cada 15min
 app.conf.beat_schedule = {
+    # Ponte prontuário <-> agenda: rede de segurança para caminhos que gravam sem chamar a ponte.
+    'ponte-prontuario-agenda-a-cada-5min': {
+        'task': 'backend.worker.tasks_prontuario_bridge.sincronizar_agendamentos',
+        'schedule': 300,
+    },
+
     'update-all-companies-availability-every-5min': {
         'task': 'backend.worker.tasks_scheduling.update_all_companies_availabilities',
         'schedule': 300,  # 300 segundos = 5 minutos
