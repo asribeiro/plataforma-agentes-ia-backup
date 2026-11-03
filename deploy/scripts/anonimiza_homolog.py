@@ -106,7 +106,7 @@ for tabela, coluna in [
 
 # --- credencial e token: zerados, para não autenticar em nada real
 for tabela, coluna in [
-    ("clients", "password"), ("clients", "api_key"), ("users", "password"),
+    ("clients", "password"), ("clients", "api_key"),
     ("agendas", "google_oauth_token"), ("calendar_integrations", "google_oauth_token"),
     ("calendar_integrations", "clinicorp_password"), ("calendar_integrations", "clinicorp_username"),
     ("companies", "zapi_token"), ("companies", "wppconnect_secret_key"),
@@ -116,8 +116,13 @@ for tabela, coluna in [
 ]:
     REGRAS[(tabela, coluna)] = VAZIO
 
-# Colunas NOT NULL não aceitam NULL: marcador inválido cumpre o papel (não descriptografa, não autentica).
-for tabela, coluna in [("ai_provider_credentials", "api_key_encrypted")]:
+# Colunas NOT NULL não aceitam NULL. Marcador inválido cumpre o papel: não autentica e não descriptografa.
+# `users.password` é NOT NULL — com NULL o UPDATE falha calado (fica o hash de produção, que é dado
+# sensível de verdade: bcrypt de senha real pode ser atacado offline).
+for tabela, coluna in [
+    ("ai_provider_credentials", "api_key_encrypted"),
+    ("users", "password"),
+]:
     REGRAS[(tabela, coluna)] = "'[removido-na-homologacao]'"
 
 print("=== aplicando anonimização")
