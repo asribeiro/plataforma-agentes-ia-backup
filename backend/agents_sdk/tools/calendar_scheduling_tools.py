@@ -355,6 +355,10 @@ def create_calendar_scheduling_tools(
                 }
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             if any_professional:
                 inicio = _parse_date(date_from, datetime.now(_safe_timezone(DEFAULT_TIMEZONE)).date())
@@ -504,6 +508,10 @@ def create_calendar_scheduling_tools(
         from backend.db import get_db
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             if require_confirmation and not confirmed_by_lead:
                 return {
@@ -721,6 +729,10 @@ def create_calendar_scheduling_tools(
         from backend.db import get_db
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             if require_confirmation and not confirmed_by_lead:
                 return {
@@ -881,6 +893,10 @@ def create_calendar_scheduling_tools(
         from backend.db import get_db
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             if require_confirmation and not confirmed_by_lead:
                 return {

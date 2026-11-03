@@ -236,6 +236,10 @@ def execute_appointment_confirmation(
 
             # Get database session
             db = next(get_db())
+            # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+            # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+            from backend.db import aplicar_contexto_seguro
+            aplicar_contexto_seguro(db, company_id)
 
             # AJUSTE CIRÚRGICO: Ensure lead exists before scheduling
             _ensure_lead_exists_for_scheduling(db, company_id, phone, customer_name, target_stage_id, media_source)

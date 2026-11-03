@@ -80,6 +80,10 @@ def process_referral_response(
 
             # Get database session
             db = next(get_db())
+            # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+            # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+            from backend.db import aplicar_contexto_seguro
+            aplicar_contexto_seguro(db, company_id)
 
             # Criar service de indicações
             referral_service = ReferralService(db)
@@ -213,6 +217,10 @@ def check_referral_campaign_status(
         try:
             from backend.db import get_db
             db = next(get_db())
+            # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+            # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+            from backend.db import aplicar_contexto_seguro
+            aplicar_contexto_seguro(db, company_id)
 
             referral_service = ReferralService(db)
             campaign = referral_service.get_active_campaign(company_id)

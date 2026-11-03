@@ -72,6 +72,10 @@ def create_whatsapp_contact_card_tools(
 
         contact_payload = _contact_card_to_waha_payload(selected_card)
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             result = send_contact_card(
                 company_id=company_id,

@@ -47,6 +47,10 @@ def create_crm_pipeline_tools(
         )
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             lead = _find_lead(db=db, company_id=company_id, phone=resolved_phone)
             pipeline = _resolve_pipeline(
@@ -101,6 +105,10 @@ def create_crm_pipeline_tools(
             }
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             lead = _find_lead(db=db, company_id=company_id, phone=resolved_phone)
             if not lead:

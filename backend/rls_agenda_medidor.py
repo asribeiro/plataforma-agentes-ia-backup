@@ -13,6 +13,7 @@ Leitura:
 """
 from __future__ import annotations
 
+import contextvars
 import logging
 import threading
 import traceback
@@ -23,7 +24,9 @@ from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
-_local = threading.local()
+# ContextVar (e não thread-local): o `asyncio.to_thread` copia o contexto para a thread de
+# execução, o thread-local não. As tools do agente rodam justamente em outra thread.
+_clinic_id: contextvars.ContextVar = contextvars.ContextVar("app_clinic_id", default=None)
 _lock = threading.Lock()
 
 _estado = {
@@ -47,15 +50,15 @@ _IGNORAR = (
 
 
 def marcar_contexto(clinic_id) -> None:
-    _local.clinic_id = clinic_id
+    _clinic_id.set(clinic_id)
 
 
 def limpar_contexto() -> None:
-    _local.clinic_id = None
+    _clinic_id.set(None)
 
 
 def contexto_atual():
-    return getattr(_local, "clinic_id", None)
+    return _clinic_id.get()
 
 
 def _origem(limite: int = 80) -> str:

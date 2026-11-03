@@ -3457,8 +3457,13 @@ def _run_coroutine_sync(coro_factory: Any) -> Any:
     except RuntimeError:
         return asyncio.run(coro_factory())
 
+    # `executor.submit` NÃO copia o contexto da thread chamadora (diferente de `asyncio.to_thread`).
+    # Sem isso, as tools do agente rodam sem o tenant da clínica e o RLS nega toda escrita.
+    import contextvars
+
+    contexto = contextvars.copy_context()
     with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(lambda: asyncio.run(coro_factory()))
+        future = executor.submit(contexto.run, lambda: asyncio.run(coro_factory()))
         return future.result()
 
 

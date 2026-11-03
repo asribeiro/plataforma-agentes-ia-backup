@@ -31,6 +31,10 @@ def generate_simple_table(days=30, use_real_tokenization=True):
     """
 
     db = next(get_db())
+    # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+    # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+    from backend.db import aplicar_contexto_seguro
+    aplicar_contexto_seguro(db, company_id)
     analytics = MessageAnalytics(db)
 
     try:
@@ -150,6 +154,10 @@ def generate_csv(days=30, output_file=None):
     """Gera CSV para exportação"""
 
     db = next(get_db())
+    # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+    # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+    from backend.db import aplicar_contexto_seguro
+    aplicar_contexto_seguro(db, company_id)
     analytics = MessageAnalytics(db)
 
     try:

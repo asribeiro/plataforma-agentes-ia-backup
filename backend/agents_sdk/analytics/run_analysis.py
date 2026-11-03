@@ -196,6 +196,10 @@ Exemplos de uso:
     # Conecta ao banco
     try:
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
     except Exception as e:
         print(f"❌ Erro ao conectar ao banco de dados: {e}", file=sys.stderr)
         return 1

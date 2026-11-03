@@ -76,6 +76,10 @@ def create_human_handoff_tools(
             }
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             contact = _get_or_create_contact(
                 db=db,

@@ -99,6 +99,10 @@ def create_whatsapp_scheduled_followup_tools(
             }
 
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
         try:
             result = schedule_followup_message_for_context(
                 db=db,

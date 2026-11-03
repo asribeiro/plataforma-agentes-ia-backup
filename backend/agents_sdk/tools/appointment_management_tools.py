@@ -154,6 +154,10 @@ def confirm_cancellation(
     from backend.services.google_credencial import build_service_da_agenda
 
     db = next(get_db())
+    # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+    # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+    from backend.db import aplicar_contexto_seguro
+    aplicar_contexto_seguro(db, company_id)
     try:
         telefone = _normalize_phone(phone) or phone
         consulta = (
@@ -305,6 +309,10 @@ def reschedule_appointment(
         return None
 
     db = next(get_db())
+    # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+    # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+    from backend.db import aplicar_contexto_seguro
+    aplicar_contexto_seguro(db, company_id)
     try:
         telefone = _normalize_phone(phone) or phone
         candidatos = (
@@ -481,6 +489,10 @@ def suggest_reschedule_before_cancel(
 
         # Get database session
         db = next(get_db())
+        # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+        # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+        from backend.db import aplicar_contexto_seguro
+        aplicar_contexto_seguro(db, company_id)
 
         # Create DatabaseSchedulingService (same as main system)
         slots_service = DatabaseSchedulingService(db=db, company_id=company_id)
@@ -624,6 +636,10 @@ def confirm_lead_appointment(
     from .calendar_scheduling_tools import _cancelar_tarefas_de_lembrete, _normalize_phone
 
     db = next(get_db())
+    # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+    # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+    from backend.db import aplicar_contexto_seguro
+    aplicar_contexto_seguro(db, company_id)
     try:
         telefone = _normalize_phone(phone) or phone
         candidatos = (
@@ -738,6 +754,10 @@ def list_lead_appointments(
     from backend.models import Agenda, Agendamento
 
     db = next(get_db())
+    # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+    # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+    from backend.db import aplicar_contexto_seguro
+    aplicar_contexto_seguro(db, company_id)
     try:
         telefone = _normalize_phone(phone) or phone
         consulta = db.query(Agendamento).filter(Agendamento.company_id == company_id)
@@ -800,6 +820,10 @@ def cancel_lead_appointments(
     from backend.models import Agenda, Agendamento
 
     db = next(get_db())
+    # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+    # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+    from backend.db import aplicar_contexto_seguro
+    aplicar_contexto_seguro(db, company_id)
     try:
         telefone = _normalize_phone(phone) or phone
         consulta = (

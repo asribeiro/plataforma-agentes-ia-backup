@@ -51,6 +51,10 @@ def create_lead_tools(company_id: int, lead_config: Dict[str, Any] = None, phone
             from backend.models import Lead, Contact, Pipeline, PipelineStage, Client
 
             db = next(get_db())
+            # RLS: a tool pode rodar em outra thread (o executor do runner nao herda contexto),
+            # entao o tenant e aplicado aqui, onde o company_id e conhecido.
+            from backend.db import aplicar_contexto_seguro
+            aplicar_contexto_seguro(db, company_id)
 
             # Resolve phone number
             current_phone = phone
