@@ -1,14 +1,46 @@
-from fastapi import APIRouter, Depends
+import os
+
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone as datetime_timezone, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy.orm import Session
 from sqlalchemy import DateTime, and_, case, cast, func, or_, text
 from backend.logging_config import logger
-from backend.db import get_db
-from backend.models import Lead, Agendamento, Comparecimento, Venda, ConversationState, LeadPipelineHistory, Pipeline, PipelineStage, NoShowEvent
+from backend.auth import get_current_user
+from backend.db import aplicar_contexto_seguro, get_db
+from backend.models import Lead, Agendamento, Comparecimento, Venda, ConversationState, LeadPipelineHistory, Pipeline, PipelineStage, NoShowEvent, ClientCompany
 
 router = APIRouter()
+
+
+def _resolver_tenant(db: Session, usuario, company_id: Optional[int]) -> Optional[int]:
+    """Empresa que esta requisição pode ler — e o tenant que vai para o RLS.
+
+    O contexto do RLS é o mecanismo de isolamento, então ele nunca recebe um `company_id` cru da query:
+    se o pedido aponta outra empresa, só passa com vínculo em `client_companies` ou e-mail na allowlist
+    de admin. `None` limpa o contexto e o RLS nega tudo — falhar fechado é o esperado.
+    """
+    proprio = getattr(usuario, "company_id", None)
+    if company_id is None or company_id == proprio:
+        return proprio
+
+    vinculo = (
+        db.query(ClientCompany)
+        .filter(
+            ClientCompany.client_id == getattr(usuario, "id", None),
+            ClientCompany.company_id == company_id,
+        )
+        .first()
+    )
+    if vinculo is not None:
+        return company_id
+
+    admin_emails = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
+    if (getattr(usuario, "email", "") or "").lower() in admin_emails:
+        return company_id
+
+    raise HTTPException(status_code=403, detail="Sem acesso a esta empresa")
 
 
 def get_metric_pipeline_stages(db: Session, company_id: Optional[int]) -> List[PipelineStage]:
@@ -50,12 +82,14 @@ def get_funnel_metrics(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     fonte: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ):
     """
     Retorna métricas de funil (Leads, Agendamentos, Comparecimentos, Vendas, etc.)
     filtradas por company_id (opcional) e intervalo de datas (opcional).
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
 
     # 1) Converter datas (caso sejam fornecidas) para objetos datetime
     #    Formato esperado: 'YYYY-MM-DD'
@@ -298,12 +332,14 @@ def get_funnel_by_source(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     fonte: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """
     Retorna a quantidade de leads por fonte, considerando as regras acima.
     É possível filtrar por company_id e intervalo de datas (sobre o campo Lead.data_entrada).
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
     fonte_case = case(
         (Lead.source_id == None, "Orgânico"),
         (Lead.source_id.op("~")('^[0-9]+$'), "Meta Ads"),
@@ -345,11 +381,13 @@ def get_daily_funnel(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     fonte: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """
     Retorna dados diários do funil baseados nos estágios do pipeline.
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
 
     # 1. Obter estágios do pipeline
     stages = get_metric_pipeline_stages(db, company_id)
@@ -491,7 +529,8 @@ def get_timeline(
     end_date: Optional[str] = None,
     timezone: Optional[str] = None,
     limit: int = 20,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """
     Retorna uma linha do tempo de eventos (Leads, Agendamentos, Comparecimentos, NoShow, Vendas).
@@ -503,6 +542,7 @@ def get_timeline(
     - timezone: timezone IANA opcional; usa UTC como fallback.
     - limit: limita a quantidade total de eventos retornados (default=20).
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
     source_limit = max(1, min(limit, 100))
     parsed_start, parsed_end = _timeline_date_bounds(start_date, end_date, timezone)
     events = []
@@ -560,11 +600,13 @@ def get_timeline(
 @router.get("/metrics/projections")
 def get_projections(
     company_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Retorna projeções para o mês atual baseadas nos estágios do pipeline.
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
 
     now = datetime.now()
 
@@ -648,7 +690,8 @@ def get_time_between_stages(
     company_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Calcula o tempo médio (em dias) para:
@@ -659,6 +702,7 @@ def get_time_between_stages(
     Ignora casos em que (evento_data - data_entrada) é negativo (dados inconsistentes).
     Filtra leads pela data_entrada, caso start_date e end_date sejam fornecidos.
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
 
     from datetime import datetime, timedelta
     from sqlalchemy import text
@@ -760,7 +804,8 @@ def get_timeseries(
     company_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """
     Retorna uma série temporal (agrupada por mês) de Leads, Agendamentos, Comparecimentos e Vendas.
@@ -769,6 +814,7 @@ def get_timeseries(
     - Comparecimentos: comparecimentos.compareceu_em
     - Vendas: vendas.venda_data
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
     # 1) Converter datas (se fornecidas) para datetime
     parsed_start = None
     parsed_end = None
@@ -838,7 +884,8 @@ def get_ai_vs_humano(
     company_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """
     Retorna contagens e valores financeiros (ex: valor_faturado) para Agendamentos,
@@ -850,6 +897,7 @@ def get_ai_vs_humano(
       3) se conversation_state indicar que a IA concluiu o agendamento
          (ex.: state_data->>'last_confirmation_timestamp' IS NOT NULL)
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
 
     # A) Parse datas
     parsed_start = None
@@ -994,13 +1042,15 @@ def get_time_distribution(
     company_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """
     Retorna a quantidade de Leads e Agendamentos agrupados por hora do dia.
     - Leads: leads.data_entrada
     - Agendamentos: agendamentos.agendamento_realizado_em
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
     # Parse datas
     fmt = "%Y-%m-%d"
     parsed_start = datetime.strptime(start_date, fmt) if start_date else None
@@ -1065,7 +1115,8 @@ def get_weekly_heatmap(
     company_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    usuario = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """
     Retorna dados de leads agregados por dia da semana e faixa de horas (ou bloco fixo).
@@ -1077,6 +1128,7 @@ def get_weekly_heatmap(
       ...
     ]
     """
+    aplicar_contexto_seguro(db, _resolver_tenant(db, usuario, company_id))  # RLS + autorização de tenant
     fmt = "%Y-%m-%d"
     parsed_start = datetime.strptime(start_date, fmt) if start_date else None
     parsed_end = datetime.strptime(end_date, fmt) if end_date else None
