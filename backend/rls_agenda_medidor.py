@@ -7,16 +7,21 @@ erro, apenas passam a não ver nada (agente agenda no vazio, lembrete não sai).
 Como funciona: listener `before_cursor_execute` no Engine vê o SQL final (sem custo de compilação extra) e
 checa um contexto de thread. `set_clinic_context` marca o contexto; `get_db` limpa ao fim da requisição.
 
-Leitura: `GET /health/rls-agenda` (header `x-monitoring-token`).
+Leitura:
+  - API: `GET /health/rls-agenda` (header `x-monitoring-token`);
+  - worker/beat: primeira ocorrência de cada origem sai no log como `[RLS-Agenda] acesso sem contexto`.
 """
 from __future__ import annotations
 
+import logging
 import threading
 import traceback
 from datetime import datetime, timezone
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
+
+logger = logging.getLogger(__name__)
 
 _local = threading.local()
 _lock = threading.Lock()
@@ -29,8 +34,16 @@ _estado = {
     "origens_sem_contexto": {},
     "amostras": [],
 }
+_origens_ja_logadas: set[str] = set()
 
-_PACOTES_IGNORADOS = ("sqlalchemy", "backend/rls_agenda_medidor", "backend/db.py", "threading")
+_IGNORAR = (
+    "sqlalchemy",
+    "site-packages",
+    "/backend/db.py",
+    "rls_agenda_medidor",
+    "threading.py",
+    "contextlib.py",
+)
 
 
 def marcar_contexto(clinic_id) -> None:
@@ -45,13 +58,16 @@ def contexto_atual():
     return getattr(_local, "clinic_id", None)
 
 
-def _origem(limite: int = 12) -> str:
-    """Primeiro frame fora do SQLAlchemy e do próprio medidor."""
-    for frame in reversed(traceback.extract_stack(limit=limite)[:-1]):
+def _origem(limite: int = 80) -> str:
+    """Primeiro frame do código da aplicação (fora do SQLAlchemy e do próprio medidor)."""
+    pilha = traceback.extract_stack(limit=limite)[:-1]
+    for frame in reversed(pilha):
         caminho = f"{frame.filename}:{frame.lineno}"
-        if any(ignorado in caminho for ignorado in _PACOTES_IGNORADOS):
+        if any(ignorado in caminho for ignorado in _IGNORAR):
             continue
         return caminho
+    if pilha:
+        return f"{pilha[0].filename}:{pilha[0].lineno}"
     return "origem_desconhecida"
 
 
@@ -60,13 +76,16 @@ def _medir_acesso_agenda(conn, cursor, statement, parameters, context, executema
     """Conta acessos a `agendamentos` e separa quem tem contexto de clínica de quem não tem."""
     if not statement or "agendamentos" not in statement:
         return
-    tem_contexto = contexto_atual() is not None
-    origem = None if tem_contexto else _origem()
+    if contexto_atual() is not None:
+        with _lock:
+            _estado["total"] += 1
+            _estado["com_contexto"] += 1
+        return
+
+    origem = _origem()
+    resumo_sql = " ".join(statement.split())[:180]
     with _lock:
         _estado["total"] += 1
-        if tem_contexto:
-            _estado["com_contexto"] += 1
-            return
         _estado["sem_contexto"] += 1
         _estado["origens_sem_contexto"][origem] = (
             _estado["origens_sem_contexto"].get(origem, 0) + 1
@@ -74,14 +93,21 @@ def _medir_acesso_agenda(conn, cursor, statement, parameters, context, executema
         if len(_estado["amostras"]) < 40:
             _estado["amostras"].append({
                 "origem": origem,
-                "sql": " ".join(statement.split())[:180],
+                "sql": resumo_sql,
                 "quando": datetime.now(timezone.utc).isoformat(),
             })
+        primeira_vez = origem not in _origens_ja_logadas
+        if primeira_vez:
+            _origens_ja_logadas.add(origem)
+
+    if primeira_vez:
+        logger.warning("[RLS-Agenda] acesso a `agendamentos` SEM contexto de clinica: %s | %s",
+                       origem, resumo_sql)
 
 
 def estatisticas() -> dict:
     with _lock:
-        dados = {
+        return {
             "iniciado_em": _estado["iniciado_em"],
             "total": _estado["total"],
             "com_contexto": _estado["com_contexto"],
@@ -95,7 +121,6 @@ def estatisticas() -> dict:
             )),
             "amostras": list(_estado["amostras"]),
         }
-    return dados
 
 
 def zerar() -> None:
@@ -106,3 +131,4 @@ def zerar() -> None:
         _estado["origens_sem_contexto"] = {}
         _estado["amostras"] = []
         _estado["iniciado_em"] = datetime.now(timezone.utc).isoformat()
+        _origens_ja_logadas.clear()
