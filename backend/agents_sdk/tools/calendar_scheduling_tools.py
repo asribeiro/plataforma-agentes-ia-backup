@@ -1964,6 +1964,7 @@ def _dispatch_confirmation_task_if_configured(
             instance_token=row.zapi_token,
             phone=appointment.phone,
             operational_epoch=operational_epoch,
+            company_id=company_id,
         )
         return "queued"
     except Exception as exc:

@@ -494,6 +494,7 @@ async def criar_agendamento(
                         instance_token="",
                         phone=agendamento_final.phone,
                         operational_epoch=operational_epoch,
+                        company_id=company_id,
                     )
                     logger.info(f"Task de confirmação (passo 1) disparada para agendamento ID={id_final_para_task}, phone={agendamento_final.phone}")
                 else:
@@ -732,6 +733,7 @@ async def atualizar_agendamento(
                             instance_id="", instance_token="",
                             phone=agendamento.phone,
                             operational_epoch=operational_epoch,
+                            company_id=company_id,
                         )
                         logger.info(f"Reiniciado fluxo de confirmação (passo 1) para reagendamento ID={agendamento.id}.")
                     else:

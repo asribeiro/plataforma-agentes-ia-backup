@@ -263,16 +263,59 @@ def clear_confirmation_steps(agendamento_id: int) -> None:
 # >>> TASKS DE CONFIRMAÇÃO
 # -----------------------------------------------------------------------------
 
+def _resolver_tenant_confirmacao(agendamento_id: int, company_id) -> "int | None":
+    """Define o tenant da task de confirmação.
+
+    Tarefas antigas na fila não têm `company_id` no payload — para elas o tenant é descoberto pelo vínculo
+    (confirmation_executions, contact_tasks, noshow_events: tabelas sem RLS). Sem isso, com o RLS ligado em
+    `agendamentos`, a task não leria nem o próprio agendamento.
+    """
+    from backend.db import definir_contexto_clinico
+
+    if company_id:
+        definir_contexto_clinico(int(company_id))
+        return int(company_id)
+
+    from sqlalchemy import text
+
+    from backend.db import SessionLocal
+
+    consultas = (
+        ("SELECT company_id FROM confirmation_executions WHERE agendamento_id = :a "
+         "ORDER BY id DESC LIMIT 1", {"a": agendamento_id}),
+        ("SELECT company_id FROM noshow_events WHERE agendamento_id = :a ORDER BY id DESC LIMIT 1",
+         {"a": agendamento_id}),
+        ("SELECT company_id FROM contact_tasks WHERE task_metadata->>'agendamento_id' = :a LIMIT 1",
+         {"a": str(agendamento_id)}),
+    )
+    with SessionLocal() as db:
+        for consulta, parametros in consultas:
+            try:
+                achado = db.execute(text(consulta), parametros).scalar()
+            except Exception:  # noqa: BLE001
+                db.rollback()
+                continue
+            if achado:
+                definir_contexto_clinico(int(achado))
+                logger.info("[CONF] tenant recuperado pelo vinculo: agendamento=%s company=%s",
+                            agendamento_id, achado)
+                return int(achado)
+    logger.warning("[CONF] sem tenant para o agendamento %s: task segue sem contexto", agendamento_id)
+    return None
+
+
 @app.task
 @check_flow_control('confirmation')
 def enviar_passo_confirmacao(agendamento_id: int, step_number: int,
                              instance_id: str, instance_token: str, phone: str,
-                             operational_epoch: int | None = None):
+                             operational_epoch: int | None = None,
+                             company_id: int | None = None):
     """
     Calcula o momento ideal de disparo do step_number e agenda
     o envio (enviar_lote_confirmacao) naquele horário.
     Usa a tabela confirmation_executions, Redis etc.
     """
+    company_id = _resolver_tenant_confirmacao(agendamento_id, company_id)
     # Lock distribuído para evitar execução simultânea
     lock_key = f"confirm:lock:passo:{agendamento_id}:{step_number}"
     lock_timeout = 30  # segundos
@@ -506,6 +549,7 @@ def enviar_passo_confirmacao(agendamento_id: int, step_number: int,
                     instance_token=instance_token,
                     phone=phone,
                     operational_epoch=operational_epoch,
+                    company_id=company_id,
                 )
             return
 
@@ -587,6 +631,7 @@ def enviar_passo_confirmacao(agendamento_id: int, step_number: int,
                 instance_token,
                 phone,
                 operational_epoch,
+                company_id,
             ],
             eta=disparo_dt_utc
         )
@@ -607,12 +652,14 @@ def enviar_passo_confirmacao(agendamento_id: int, step_number: int,
 @check_flow_control('confirmation')
 def enviar_lote_confirmacao(agendamento_id: int, step_number: int,
                             instance_id: str, instance_token: str, phone: str,
-                            operational_epoch: int | None = None):
+                            operational_epoch: int | None = None,
+                            company_id: int | None = None):
     """
     Dispara efetivamente as mensagens do step no horário calculado.
     Agora com a lógica de registrar PROCESSING/SUCCESS/FAILED em confirmation_executions.
     Também checa se a consulta_data mudou (reagendamento).
     """
+    company_id = _resolver_tenant_confirmacao(agendamento_id, company_id)
     from backend.integrations.whatsapp_provider import (
         WhatsAppConfig,
         send_audio as send_whatsapp_audio,
@@ -744,6 +791,7 @@ def enviar_lote_confirmacao(agendamento_id: int, step_number: int,
                         instance_token="",
                         phone=company_id_row.phone,
                         operational_epoch=operational_epoch,
+                        company_id=company_id,
                     )
                 return
 
@@ -1004,6 +1052,7 @@ def enviar_lote_confirmacao(agendamento_id: int, step_number: int,
                 instance_token="",
                 phone=phone,
                 operational_epoch=operational_epoch,
+                company_id=company_id,
             )
 
     except Exception as e:

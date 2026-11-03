@@ -138,6 +138,7 @@ def _try_send_confirmation_task(db: Session, company_id: int, local_appointment_
                 instance_token=row_cred.zapi_token,
                 phone=phone,
                 operational_epoch=operational_epoch,
+                company_id=company_id,
             )
             logger.info(f"Task Celery 'enviar_passo_confirmacao' disparada para agendamento local ID {local_appointment_id}")
         else: logger.warning(f"Credenciais Z-API não encontradas company_id={company_id}.")
