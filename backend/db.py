@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session, sessionmaker, declarative_base
 from sqlalchemy.pool import Pool
 from typing import Generator
 
+from backend import rls_agenda_medidor
+
 # SQLite used in tests and local development cannot compile PostgreSQL's JSONB
 # type natively. Map it to JSON so table creation and validation pass while
 # keeping the real PostgreSQL schema unchanged in production.
@@ -185,6 +187,8 @@ def get_db() -> Generator:
     try:
         yield db
     finally:
+        # a thread do pool é reaproveitada: o contexto de clínica não pode vazar para a próxima requisição
+        rls_agenda_medidor.limpar_contexto()
         db.close()
 
 
@@ -203,6 +207,7 @@ def set_clinic_context(db: Session, clinic_id: int) -> None:
         raise ValueError("clinic_id deve ser um inteiro positivo")
 
     db.info["clinic_id"] = normalized_clinic_id
+    rls_agenda_medidor.marcar_contexto(normalized_clinic_id)
     if db.bind is not None and db.bind.dialect.name == "postgresql":
         db.execute(
             text("SELECT set_config('app.clinic_id', :clinic_id, true)"),

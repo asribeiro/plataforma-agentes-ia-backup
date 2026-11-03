@@ -758,6 +758,14 @@ async def log_and_metrics_middleware(request: Request, call_next):
 def metrics(_: bool = Depends(require_monitoring_access)):
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+@app.get("/health/rls-agenda", include_in_schema=False)
+def rls_agenda(_: bool = Depends(require_monitoring_access)):
+    """Cobertura de contexto de clínica nos acessos à tabela `agendamentos` (etapa 1 do RLS da agenda)."""
+    from backend import rls_agenda_medidor
+
+    return rls_agenda_medidor.estatisticas()
+
+
 @app.get("/health/db-connections", include_in_schema=False)
 def db_connection_health(_: bool = Depends(require_monitoring_access)):
     """Monitora o pool e confirma que o banco executa uma consulta real."""
