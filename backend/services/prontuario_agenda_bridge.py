@@ -20,6 +20,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from backend.db import set_clinic_context
+
 logger = logging.getLogger(__name__)
 
 ORIGEM_AGENDA = "agenda"
@@ -118,6 +120,14 @@ def sincronizar_agendamento(db: Session, agendamento) -> dict:
 
     status_agenda = str(agendamento.status or "SCHEDULED").upper()
     status_clinico = MAPA_STATUS.get(status_agenda, "scheduled")
+
+    # RLS: a clínica do agendamento passa a ser o tenant desta transação
+    try:
+        set_clinic_context(db, int(agendamento.company_id))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[PonteProntuario] contexto de clinica nao aplicado (%s): %s",
+                       agendamento.company_id, exc)
+        return {"ok": False, "motivo": "contexto de clinica invalido"}
 
     existente = (
         db.query(PatientAppointment)

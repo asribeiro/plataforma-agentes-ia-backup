@@ -208,3 +208,22 @@ def set_clinic_context(db: Session, clinic_id: int) -> None:
             text("SELECT set_config('app.clinic_id', :clinic_id, true)"),
             {"clinic_id": str(normalized_clinic_id)},
         )
+
+@event.listens_for(Session, "after_begin")
+def _reaplicar_contexto_clinico(session, transaction, connection):
+    """Reaplica o tenant em toda transação nova.
+
+    `set_config('app.clinic_id', ..., true)` vale até o fim da transação — um `commit()` no meio de uma
+    rota clínica deixaria a transação seguinte sem tenant e as policies RLS negariam tudo. Aqui o
+    contexto guardado em `session.info` volta a ser aplicado em cada transação que abre.
+    """
+    clinic_id = session.info.get("clinic_id")
+    if not clinic_id:
+        return
+    if connection.dialect.name != "postgresql":
+        return
+    connection.execute(
+        text("SELECT set_config('app.clinic_id', :clinic_id, true)"),
+        {"clinic_id": str(clinic_id)},
+    )
+
