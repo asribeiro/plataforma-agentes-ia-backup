@@ -192,6 +192,26 @@ def get_db() -> Generator:
         db.close()
 
 
+def definir_contexto_clinico(clinic_id: int) -> None:
+    """Marca o tenant da thread inteira (quando não há sessão em mãos).
+
+    Usado nos pontos de entrada de fluxo (runner do agente, task do WhatsApp): toda sessão aberta na
+    mesma thread herda o contexto pelo listener `after_begin`.
+    """
+    try:
+        rls_agenda_medidor.marcar_contexto(int(clinic_id))
+    except (TypeError, ValueError):
+        logger.warning("[RLS] contexto de clinica invalido: %r", clinic_id)
+
+
+def aplicar_contexto_seguro(db: Session, clinic_id) -> None:
+    """Aplica o contexto na sessão sem nunca derrubar a rota que chamou."""
+    try:
+        set_clinic_context(db, clinic_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[RLS] contexto de clinica nao aplicado (%s): %s", clinic_id, exc)
+
+
 def set_clinic_context(db: Session, clinic_id: int) -> None:
     """Define o tenant da transação para as políticas RLS do prontuário.
 
@@ -222,7 +242,7 @@ def _reaplicar_contexto_clinico(session, transaction, connection):
     rota clínica deixaria a transação seguinte sem tenant e as policies RLS negariam tudo. Aqui o
     contexto guardado em `session.info` volta a ser aplicado em cada transação que abre.
     """
-    clinic_id = session.info.get("clinic_id")
+    clinic_id = session.info.get("clinic_id") or rls_agenda_medidor.contexto_atual()
     if not clinic_id:
         return
     if connection.dialect.name != "postgresql":

@@ -1085,6 +1085,10 @@ def process_incoming_waha_message(self, task_data: Dict[str, Any]):
         session_name = task_data.get("session_name")
         audit_id = task_data.get("audit_id")
         company_id = task_data.get("company_id")
+        if company_id:
+            from backend.db import definir_contexto_clinico
+
+            definir_contexto_clinico(company_id)  # RLS: fluxo inteiro neste tenant
         requested_operational_epoch = task_data.get("operational_epoch")
         from backend.services.company_access_control import (
             CompanyOperationalLockBusyError,

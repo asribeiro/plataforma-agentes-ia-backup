@@ -121,6 +121,9 @@ def _agent_history_content(message_type: str, content: str, from_me: bool) -> st
     return f"[{label} {direction}]"
 
 
+from backend.db import definir_contexto_clinico
+
+
 class AgentExecutionManager:
     """
     Main manager class that orchestrates agent operations for any organization.
@@ -128,6 +131,7 @@ class AgentExecutionManager:
     """
 
     def __init__(self, company_id: int, db: Session):
+        definir_contexto_clinico(company_id)  # RLS: tools do agente herdam este tenant
         self.company_id = company_id
         self.db = db
         self.organization_data_service = CompanyDataService(db)

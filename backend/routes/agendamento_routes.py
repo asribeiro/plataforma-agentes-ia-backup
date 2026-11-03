@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import json
 
 import os
-from backend.db import get_db
+from backend.db import aplicar_contexto_seguro, get_db
 from backend.auth import verify_client_or_bearer_api_key
 from backend.services.feriados import feriado_bloqueia
 from backend.models import Agendamento, Agenda, Client, NoShowEvent, Lead, CalendarIntegration
@@ -255,6 +255,7 @@ async def listar_agendamentos(
     db: Session = Depends(get_db),
     _: Client = Depends(verify_client_or_bearer_api_key)
 ):
+    aplicar_contexto_seguro(db, company_id)  # RLS: tenant da agenda
     logger.info(f"[listar_agendamentos] client_id={client_id}, company_id={company_id}, agenda_id={agenda_id}, range={start_date}-{end_date}")
     try:
         query = db.query(Agendamento).options(joinedload(Agendamento.agenda)).filter(
@@ -289,6 +290,7 @@ async def obter_agendamento(
     db: Session = Depends(get_db),
     _: Client = Depends(verify_client_or_bearer_api_key)
 ):
+    aplicar_contexto_seguro(db, company_id)  # RLS: tenant da agenda
     logger.info(f"[obter_agendamento] client_id={client_id}, company_id={company_id}, agendamento_id={agendamento_id}")
     try:
         agendamento = db.query(Agendamento).options(joinedload(Agendamento.agenda)).filter(
@@ -327,6 +329,7 @@ async def criar_agendamento(
     bem-sucedida. A função sync_appointment_to_clinicorp (se usada)
     deleta o registro local anterior e cria um novo.
     """
+    aplicar_contexto_seguro(db, company_id)  # RLS: tenant da agenda
     logger.info(f"[Criar Agendamento Rota] company_id={company_id}, payload={payload.dict(exclude_unset=True)}")
 
     # --- Validação do Lead (como no original) ---
@@ -560,6 +563,7 @@ async def atualizar_agendamento(
     As atualizações locais são feitas PRIMEIRO. Falhas na sincronização
     são logadas como aviso, mas não impedem o sucesso da requisição PUT.
     """
+    aplicar_contexto_seguro(db, company_id)  # RLS: tenant da agenda
     logger.info(f"[Atualizar Agendamento Rota] ID={agendamento_id} para company_id={company_id}")
 
     # --- AJUSTE AQUI ---
@@ -813,6 +817,7 @@ async def deletar_agendamento(
     e tenta cancelar na plataforma externa ANTES da deleção local.
     Falha no cancelamento externo é logada como aviso, mas não impede a deleção local.
     """
+    aplicar_contexto_seguro(db, company_id)  # RLS: tenant da agenda
     logger.info(f"[Deletar Agendamento Rota] Iniciando para company_id={company_id}, agendamento_id={agendamento_id}")
 
     # --- AJUSTE AQUI ---
@@ -976,6 +981,7 @@ async def obter_agendamento_por_telefone(
     Obtém um agendamento específico pelo número de telefone,
     vinculado ao client_id e company_id.
     """
+    aplicar_contexto_seguro(db, company_id)  # RLS: tenant da agenda
     logger.info(f"[obter_agendamento_por_telefone] client_id={client_id}, company_id={company_id}, phone={phone}")
     try:
         agendamento = db.query(Agendamento).filter(
@@ -1016,6 +1022,7 @@ def marcar_no_show(
     (nome, phone, data_agendada), e salva a observação vinda do payload.
     Dispara eventuais tarefas Celery (caso necessário).
     """
+    aplicar_contexto_seguro(db, company_id)  # RLS: tenant da agenda
     try:
         # 1) Verifica se o agendamento existe
         ag = db.query(Agendamento).filter_by(
