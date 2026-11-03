@@ -47,11 +47,15 @@ def _texto_do_lembrete(task: ContactTask) -> str:
     else:
         quando = metadata.get("consulta") or "a data combinada"
 
-    nome = "paciente"
-    if task.contact and task.contact.name:
-        nome = task.contact.name.strip().split(" ")[0]
+    from backend.services.nome_do_paciente import primeiro_nome_confiavel, saudacao_com_nome
+
+    nome = primeiro_nome_confiavel(
+        metadata.get("nome"),
+        getattr(task.contact, "name", None) if task.contact else None,
+        telefone=telefone,
+    )
     return (
-        f"Olá, {nome}! Passando para confirmar sua consulta em {quando}. "
+        f"{saudacao_com_nome(nome)} Passando para confirmar sua consulta em {quando}. "
         f"Você confirma? Se precisar remarcar, me avise que eu vejo os horários disponíveis."
     )
 

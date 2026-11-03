@@ -126,10 +126,18 @@ def _criar_tarefas_de_lembrete(
         )
         # Texto que o PACIENTE recebe. Sem `message_content` o pipeline de mensagem agendada
         # não tem o que enviar (era o defeito: o lembrete só existia como cartão no CRM).
-        primeiro_nome = (getattr(contato, "name", None) or "paciente").strip().split(" ")[0]
+        from backend.services.nome_do_paciente import primeiro_nome_confiavel, saudacao_com_nome
+
+        # Nome do agendamento primeiro (é o que o paciente/secretaria digitou), depois o do contato —
+        # que costuma ser pushname ("Eu pessoal") e é descartado como genérico.
+        primeiro_nome = primeiro_nome_confiavel(
+            getattr(appointment, "nome", None),
+            getattr(contato, "name", None),
+            telefone=getattr(contato, "phone", None) or getattr(appointment, "phone", None),
+        )
         nome_agenda = getattr(agenda, "name", None) or "nossa clínica"
         texto_paciente = (
-            f"Olá, {primeiro_nome}! Aqui é da {nome_agenda}. "
+            f"{saudacao_com_nome(primeiro_nome)} Aqui é da {nome_agenda}. "
             f"Passando para confirmar sua consulta em "
             f"{inicio_local.strftime('%d/%m/%Y')} às {inicio_local.strftime('%H:%M')}. "
             f"Você confirma? Se precisar remarcar, me avise que eu vejo os horários disponíveis."
