@@ -2356,10 +2356,6 @@ class Service(Base):
     # Marca a consulta de diagnostico. Todo procedimento passa por uma antes.
     is_evaluation = Column(Boolean, nullable=False, server_default=text("false"))
     active = Column(Boolean, nullable=False, server_default=text("true"))
-    # Espelhar a agenda deste profissional em calendário externo (Google/Clinicorp). Desligado por padrão:
-    # a maioria das clínicas não tem quem conecte OAuth, e o profissional segue com agenda própria no
-    # sistema. Quem liga é o admin da clínica (ver professionals_routes).
-    sync_external_calendar = Column(Boolean, nullable=False, server_default=text("false"))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(),
                         onupdate=func.now(), nullable=False)
@@ -2386,6 +2382,10 @@ class Professional(Base):
     phone = Column(String(30), nullable=True)
     cro = Column(String(30), nullable=True)
     active = Column(Boolean, nullable=False, server_default=text("true"))
+    # Espelhar a agenda deste profissional em calendário externo (Google/Clinicorp). Desligado por padrão:
+    # a maioria das clínicas não tem quem conecte OAuth, e o profissional segue com agenda própria no
+    # sistema. Quem liga é o admin da clínica (ver professionals_routes).
+    sync_external_calendar = Column(Boolean, nullable=False, server_default=text("false"))
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(),
                         onupdate=func.now(), nullable=False)
