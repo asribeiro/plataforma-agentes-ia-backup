@@ -33,9 +33,12 @@ with e.begin() as c:
     """), {"email": EMAIL, "senha": hash_password(senha)})
     print(f"conta master atualizada: {r.rowcount} linha(s)")
 
-    # usuário admin da empresa, para telas que exigem usuário de empresa
+    # usuário admin da empresa, para telas que exigem usuário de empresa.
+    # Domínio tem de ser válido: `.test`, `.local`, `.invalid` e `.example` são reservados e o validador de
+    # e-mail da aplicação recusa. Com eles, rotas que devolvem response_model com EmailStr (GET /api/users,
+    # GET /api/admin/company-registration/current) respondem 500 e a tela nem carrega.
     r2 = c.execute(text("""
-        UPDATE users SET email = 'admin@homolog.test', password = :senha
+        UPDATE users SET email = 'admin@homolog.com.br', password = :senha
          WHERE id = (SELECT min(id) FROM users)
     """), {"senha": hash_password(senha)})
     print(f"usuário admin atualizado: {r2.rowcount} linha(s)")
