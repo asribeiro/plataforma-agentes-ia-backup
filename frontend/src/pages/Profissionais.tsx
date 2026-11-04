@@ -52,9 +52,11 @@ interface FormState {
   email: string;
   telefone: string;
   cro: string;
+  sincronizarAgendaExterna: boolean;
 }
 
-const formVazio: FormState = { nome: '', email: '', telefone: '', cro: '' };
+// Padrão "Não": clínica que não pedir explicitamente não lida com agenda externa.
+const formVazio: FormState = { nome: '', email: '', telefone: '', cro: '', sincronizarAgendaExterna: false };
 
 const emailValido = (valor: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(valor.trim());
 
@@ -137,6 +139,7 @@ const Profissionais: React.FC = () => {
       email: profissional.email ?? '',
       telefone: profissional.phone ?? '',
       cro: profissional.cro ?? '',
+      sincronizarAgendaExterna: profissional.sync_external_calendar === true,
     });
     setSelecionados([]);
     setErroForm(null);
@@ -191,6 +194,7 @@ const Profissionais: React.FC = () => {
       email: form.email.trim().toLowerCase(),
       phone: telefone === '' ? null : telefone,
       cro: cro === '' ? null : cro,
+      sync_external_calendar: form.sincronizarAgendaExterna,
     };
 
     setSalvando(true);
@@ -643,6 +647,27 @@ const Profissionais: React.FC = () => {
               maxLength={30}
               className={agentiveInputClass(isDark)}
             />
+          </div>
+
+          <div>
+            <label className={agentiveLabelClass(isDark)} htmlFor="prof-sync-externo">
+              Sincronizar com agenda externa
+            </label>
+            <select
+              id="prof-sync-externo"
+              value={form.sincronizarAgendaExterna ? 'sim' : 'nao'}
+              onChange={(e) =>
+                setForm((atual) => ({ ...atual, sincronizarAgendaExterna: e.target.value === 'sim' }))
+              }
+              className={agentiveInputClass(isDark)}
+            >
+              <option value="nao">Não — agenda apenas no sistema</option>
+              <option value="sim">Sim — espelhar em Google Agenda ou outro serviço</option>
+            </select>
+            <p className={`mt-1 text-xs ${mutedClass}`}>
+              Com “Não”, o profissional continua com uma agenda única no sistema e nada é enviado para fora.
+              Esta opção é definida pelo administrador da clínica.
+            </p>
           </div>
 
           <div className={`rounded-2xl border p-4 ${borderClass}`}>

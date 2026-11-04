@@ -41,6 +41,8 @@ export interface Profissional {
   cro: string | null;
   active: boolean;
   services: number;
+  /** Espelhar a agenda deste profissional em calendário externo. Padrão: false. */
+  sync_external_calendar: boolean;
 }
 
 export interface ProfissionalEntrada {
@@ -48,6 +50,7 @@ export interface ProfissionalEntrada {
   email: string;
   phone?: string | null;
   cro?: string | null;
+  sync_external_calendar?: boolean;
 }
 
 export interface Vinculo {

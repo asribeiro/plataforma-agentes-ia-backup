@@ -7,12 +7,34 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 FONTE_AGENDA = "agenda"
+
+
+def sincronizacao_externa_habilitada(agenda: Any) -> bool:
+    """A agenda deste profissional pode falar com calendário externo?
+
+    O interruptor vive no profissional (`sync_external_calendar`), porque é o que a clínica cadastra, e vem
+    desligado por padrão. Agenda sem profissional (agenda geral da empresa) mantém o comportamento anterior:
+    sincroniza se tiver credencial.
+
+    Esta função é o único lugar que decide — os 11 caminhos que falam com o Google passam por aqui, então
+    não existe caminho esquecido sincronizando quando a clínica disse "não".
+    """
+    profissional = getattr(agenda, "professional", None) if agenda is not None else None
+    if profissional is None:
+        return True
+    return bool(getattr(profissional, "sync_external_calendar", False))
+
+
 def credencial_google_da_agenda(
     db: Session,
     company_id: Optional[int],
     agenda: Any = None,
 ) -> Tuple[Optional[Any], Optional[str]]:
     """Return the agenda credential, or (None, None) if it is not connected."""
+    if agenda is not None and not sincronizacao_externa_habilitada(agenda):
+        # Clínica disse "não sincronizar": nem o token guardado é usado.
+        return None, None
+
     if agenda is not None and getattr(agenda, "google_oauth_token", None):
         return agenda, FONTE_AGENDA
 
@@ -47,4 +69,6 @@ def build_service_da_agenda(db: Session, company_id: Optional[int], agenda: Any 
 
 def calendar_id_da_agenda(db: Session, company_id: Optional[int], agenda: Any) -> Optional[str]:
     """Return only the calendar explicitly selected for this agenda."""
+    if not sincronizacao_externa_habilitada(agenda):
+        return None
     return getattr(agenda, "google_calendar_id", None)

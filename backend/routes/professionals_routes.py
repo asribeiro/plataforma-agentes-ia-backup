@@ -64,6 +64,8 @@ class ProfessionalIn(BaseModel):
     email: str = Field(..., min_length=5, max_length=255)
     phone: Optional[str] = Field(None, max_length=30)
     cro: Optional[str] = Field(None, max_length=30)
+    # Padrão desligado: quem não pedir explicitamente fica sem sincronização externa.
+    sync_external_calendar: bool = False
 
 
 class ProfessionalPatch(BaseModel):
@@ -72,6 +74,7 @@ class ProfessionalPatch(BaseModel):
     phone: Optional[str] = Field(None, max_length=30)
     cro: Optional[str] = Field(None, max_length=30)
     active: Optional[bool] = None
+    sync_external_calendar: Optional[bool] = None
 
 
 class ProfessionalOut(BaseModel):
@@ -82,6 +85,7 @@ class ProfessionalOut(BaseModel):
     cro: Optional[str] = None
     active: bool
     services: int = 0
+    sync_external_calendar: bool = False
 
     class Config:
         from_attributes = True
@@ -106,6 +110,27 @@ class VinculoOut(BaseModel):
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
+PAPEIS_QUE_ESCOLHEM_SINCRONIZACAO = {"admin", "clinic_admin"}
+
+MSG_SINCRONIZACAO = (
+    "A sincronização com agenda externa é definida pelo administrador da clínica. "
+    "O profissional continua com agenda própria no sistema, sem espelhamento externo."
+)
+
+
+def _pode_escolher_sincronizacao(usuario) -> bool:
+    """Quem decide se a agenda do profissional sai para um calendário externo.
+
+    O cadastro do profissional não deve exigir conhecimento de OAuth — por isso a decisão é do admin da
+    clínica. O dono da conta (Client, que não tem `role`) também decide, para não travar clínicas sem
+    admin nomeado. Profissional e staff não mudam esta opção.
+    """
+    papel = (getattr(usuario, "role", "") or "").lower()
+    if not papel:
+        return True
+    return papel in PAPEIS_QUE_ESCOLHEM_SINCRONIZACAO
+
+
 def _buscar(professional_id: int, company_id: int, db: Session) -> Professional:
     obj = (
         db.query(Professional)
@@ -136,6 +161,7 @@ def _saida(p: Professional, db: Session) -> ProfessionalOut:
         cro=p.cro,
         active=p.active,
         services=_contar_servicos(p.id, db),
+        sync_external_calendar=bool(getattr(p, "sync_external_calendar", False)),
     )
 
 
@@ -231,6 +257,9 @@ def criar(
     company_id = _company_do_usuario(usuario)
     _verificar_limite_de_profissionais(company_id, db)
 
+    if dados.sync_external_calendar and not _pode_escolher_sincronizacao(usuario):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=MSG_SINCRONIZACAO)
+
     if _email_em_uso(dados.email, company_id, db):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -244,6 +273,7 @@ def criar(
         phone=dados.phone,
         cro=dados.cro,
         active=True,
+        sync_external_calendar=bool(dados.sync_external_calendar),
     )
     db.add(novo)
     db.commit()
@@ -271,6 +301,9 @@ def atualizar(
     company_id = _company_do_usuario(usuario)
     obj = _buscar(professional_id, company_id, db)
 
+    if dados.sync_external_calendar is not None and not _pode_escolher_sincronizacao(usuario):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=MSG_SINCRONIZACAO)
+
     if dados.email is not None:
         if _email_em_uso(dados.email, company_id, db, ignorar_id=obj.id):
             raise HTTPException(
@@ -290,7 +323,12 @@ def atualizar(
 
     # telefone e CRO sao anulaveis: null explicito APAGA (corrigir cadastro
     # errado), campo ausente PRESERVA. `active` nao aceita null.
-    aplicar_patch(obj, dados, ("phone", "cro", "active"), anulaveis=("phone", "cro"))
+    aplicar_patch(
+        obj,
+        dados,
+        ("phone", "cro", "active", "sync_external_calendar"),
+        anulaveis=("phone", "cro"),
+    )
 
     db.commit()
     db.refresh(obj)
