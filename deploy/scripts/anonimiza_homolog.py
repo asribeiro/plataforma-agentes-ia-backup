@@ -45,7 +45,11 @@ def num(expr: str, mod: int, largura: int) -> str:
 NOME = "('Pessoa ' || " + num("{}", 900000, 6) + ")"
 # telefone -> sufixo numérico estável, prefixo de telefone fictício
 FONE = "('55199' || " + num("{}", 100000000, 8) + ")"
-EMAIL = "('pessoa' || " + num("{}", 900000, 6) + " || '@exemplo.test')"
+# Domínio de e-mail do retrato anonimizado.
+# NÃO usar `.test`, `.local`, `.invalid` nem `.example`: são domínios reservados e o validador da
+# aplicação (pydantic EmailStr) recusa. Como a tela de cadastro da empresa reconstrói o payload a
+# partir do banco, um e-mail recusado derrubava o GET /current com 500.
+EMAIL = "('pessoa' || " + num("{}", 900000, 6) + " || '@exemplo.com.br')"
 DOC = "(" + num("{}", 100000000000, 11) + ")"
 TEXTO = "('[anonimizado na homologação — ' || coalesce(length({}::text), 0) || ' caracteres]')"
 ENDERECO = "'Rua Anonimizada, 100'"
@@ -169,6 +173,6 @@ with e.connect() as c:
 
     print("\n=== nenhum resíduo de e-mail real?")
     residuo = c.execute(text("""
-        SELECT count(*) FROM users WHERE email NOT LIKE '%@exemplo.test'
+        SELECT count(*) FROM users WHERE email NOT LIKE '%@exemplo.com.br'
     """)).scalar()
     print(f"   usuários com e-mail não anonimizado: {residuo}")

@@ -8,7 +8,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import BaseModel, ValidationError, ConfigDict, EmailStr, Field, field_validator
 from sqlalchemy.orm import Session
 
 from backend.auth import get_current_user, hash_password
@@ -182,7 +182,28 @@ def get_current_registration(
     company = db.query(Company).filter(Company.id == getattr(user, "company_id", None)).first()
     if not company:
         raise HTTPException(status_code=404, detail="Empresa não encontrada")
-    return CompanyRegistrationPayload.model_validate(_company_payload(company))
+
+    dados = _company_payload(company)
+    try:
+        return CompanyRegistrationPayload.model_validate(dados)
+    except ValidationError as erro:
+        # Dado legado inválido no banco não pode derrubar a tela com 500: a exceção nasce dentro de uma
+        # dependência, e o FastAPI só transformaria em 422 se viesse do corpo da requisição. Aqui nomeamos o
+        # campo para o admin da clínica conseguir corrigir — foi o que aconteceu com e-mail anonimizado em
+        # domínio reservado (`@exemplo.test`).
+        campos = ", ".join(
+            ".".join(str(parte) for parte in item.get("loc", ())) or "payload"
+            for item in erro.errors()
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "O cadastro da empresa tem campo inválido no banco: "
+                f"{campos}. Corrija esse dado para a tela carregar. "
+                "Atenção a e-mail em domínio reservado (.test, .local, .invalid, .example): "
+                "a validação recusa."
+            ),
+        )
 
 
 @router.put("/current", response_model=CompanyRegistrationPayload)
